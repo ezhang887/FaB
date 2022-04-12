@@ -27,7 +27,11 @@ def create_message(msg_type: MessageType, **kwargs) -> bytes:
             for field in required_fields:
                 if field not in required_fields:
                     raise ValueError(
-                        f"Cannot find required parameter '{field}' when creating message of type '{msg_type.value}'"
+                        f"Cannot find required parameter '{field}' in 'required_fields' when creating message of type '{msg_type.value}'"
+                    )
+                if field not in kwargs:
+                    raise ValueError(
+                        f"Cannot find required parameter '{field}' in 'kwargs' when creating message of type '{msg_type.value}'"
                     )
                 content[field] = kwargs[field]
             break

@@ -47,29 +47,68 @@ class Node:
             learned_nodes_proposer = set()
 
         if self.node_config.is_acceptor:
-            accepted = False
+            accepted = None
 
         if self.node_config.is_learner:
             accepted_nodes = dict()
             learned_nodes = dict()
             learned = None
 
-        # leader.onStart()
+        started_send_pull = False
+        started_send_proposals = False
+
         if self.is_leader:
-            assert self.node_config.is_proposer
             value_to_propose = self.get_input()
 
-            msg_to_send = create_message(
-                MessageType.PROPOSE,
-                value=value_to_propose,
-                pnumber=self.system_config.leader_id,
-                progress_cert="",
-            )
-
-            # TODO: repeat until |Satisfied| >= ceil(p + f + 1) / 2)
-            self.multicast_acceptors(msg_to_send)
-
         while True:
+            done = True
+            # Make sure we proposal duties and learner duties are completed before returning
+            if self.node_config.is_proposer:
+                if self.node_config.node_id not in satisfied_nodes:
+                    done = False
+            if self.node_config.is_learner:
+                if learned is None:
+                    done = False
+
+            # If this node is only an acceptor, than don't return (TODO: FIX THIS?)
+            if (
+                self.node_config.is_acceptor
+                and not self.node_config.is_proposer
+                and not self.node_config.is_learner
+            ):
+                done = False
+
+            if done:
+                if self.node_config.is_learner:
+                    return learned
+                else:
+                    return None
+
+            # leader.onStart()
+            if self.is_leader:
+                assert self.node_config.is_proposer
+
+                def send_proposals():
+                    if len(satisfied_nodes) >= math.ceil(
+                        (self.system_config.P + self.system_config.f + 1) / 2
+                    ):
+                        return
+
+                    msg_to_send = create_message(
+                        MessageType.PROPOSE,
+                        value=value_to_propose,
+                        pnumber=self.system_config.leader_id,
+                        progress_cert="",
+                    )
+                    self.multicast_acceptors(msg_to_send)
+
+                    # Re-schedule this later
+                    gevent.spawn_later(1, send_proposals)
+
+                if not started_send_proposals:
+                    send_proposals()
+                    started_send_proposals = True
+
             sender_id, msg_bytes = self.receive_func()
             message = parse_message(msg_bytes)
             assert message is not None
@@ -92,19 +131,18 @@ class Node:
                 self.node_config.is_proposer
                 and message["type"] == MessageType.SATISFIED
             ):
-                satisfied.add(sender_id)
+                satisfied_nodes.add(sender_id)
 
             # --------------------ACCEPTOR---------------------
             # acceptor.onPropose()
             if self.node_config.is_acceptor and message["type"] == MessageType.PROPOSE:
-                if not accepted:
-                    accepted = True
-                    msg_to_send = create_message(
-                        MessageType.ACCEPTED,
-                        value=message["value"],
-                        pnumber=message["pnumber"],
-                    )
-                    self.multicast_learners(msg_to_send)
+                accepted = message["value"], message["pnumber"]
+                msg_to_send = create_message(
+                    MessageType.ACCEPTED,
+                    value=message["value"],
+                    pnumber=message["pnumber"],
+                )
+                self.multicast_learners(msg_to_send)
 
             # --------------------LEARNER---------------------
             # learner.onAccepted()
@@ -119,6 +157,7 @@ class Node:
                 if num_accepts >= math.ceil(
                     (self.system_config.A + 3 * self.system_config.f + 1) / 2
                 ):
+                    learned = (message["value"], message["pnumber"])
                     msg_to_send = create_message(
                         MessageType.LEARNED,
                         value=message["value"],
@@ -128,15 +167,28 @@ class Node:
 
             # learner.onStart()
             if self.node_config.is_learner:
-                # TODO: make this better (have a timeout instead of constantly send PULL)
-                msg_to_send = create_message(MessageType.PULL)
-                self.multicast_learners(msg_to_send)
+
+                def send_pull():
+                    if learned is not None:
+                        return
+
+                    msg_to_send = create_message(MessageType.PULL)
+                    self.multicast_learners(msg_to_send)
+
+                    # Re-schedule this later
+                    gevent.spawn_later(1, send_pull)
+
+                if not started_send_pull:
+                    send_pull()
+                    started_send_pull = True
 
             # learner.onPull()
             if self.node_config.is_learner and message["type"] == MessageType.PULL:
                 if learned is not None:
                     value, pnumber = learned
-                    msg_to_send = create_message(MessageType.LEARNED)
+                    msg_to_send = create_message(
+                        MessageType.LEARNED, value=value, pnumber=pnumber
+                    )
                     self.send_func(sender_id, msg_to_send)
 
             # learner.onLearned()
@@ -150,8 +202,7 @@ class Node:
 
                 if num_learns >= self.system_config.f + 1:
                     learned = (message["value"], message["pnumber"])
-                    print(f"Node {self.node_config.node_id} has LEARNED {learned}")
-                    break
+                    # print(f"Learner {self.node_config.node_id} has LEARNED {learned}")
 
     def start(self):
         self.thread = Greenlet(self.run)
@@ -159,3 +210,4 @@ class Node:
 
     def wait(self):
         self.thread.join()
+        return self.thread.value

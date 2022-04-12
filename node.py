@@ -15,6 +15,7 @@ class Node:
         receive_func: Callable,
         send_func: Callable,
         get_input: Callable,
+        timeout: int = 1,       # Units in seconds
     ):
         self.system_config = system_config
         self.node_config = node_config
@@ -24,6 +25,7 @@ class Node:
         self.get_input = get_input
 
         self.is_leader = system_config.leader_id == node_config.node_id
+        self.timeout = timeout
 
     def multicast(
         self, message: bytes, node_filter: Optional[Callable[[NodeConfig], bool]] = None
@@ -103,7 +105,7 @@ class Node:
                     self.multicast_acceptors(msg_to_send)
 
                     # Re-schedule this later
-                    gevent.spawn_later(1, send_proposals)
+                    gevent.spawn_later(self.timeout, send_proposals)
 
                 if not started_send_proposals:
                     send_proposals()
@@ -176,7 +178,7 @@ class Node:
                     self.multicast_learners(msg_to_send)
 
                     # Re-schedule this later
-                    gevent.spawn_later(1, send_pull)
+                    gevent.spawn_later(self.timeout, send_pull)
 
                 if not started_send_pull:
                     send_pull()

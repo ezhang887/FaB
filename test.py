@@ -7,6 +7,7 @@ from config import NodeConfig, SystemConfig
 
 from typing import List
 
+
 def simple_test():
     f = 1
     P = 3 * f + 1
@@ -59,6 +60,7 @@ def simple_test():
             assert res[0] == 254
             assert res[1] == leader
             print(f"Output from learner {n.node_config.node_id} is {res}")
+
 
 def simple_test_unique_roles():
     """
@@ -116,6 +118,7 @@ def simple_test_unique_roles():
             assert res[0] == 254
             assert res[1] == leader
             print(f"Output from learner {n.node_config.node_id} is {res}")
+
 
 simple_test()
 simple_test_unique_roles()

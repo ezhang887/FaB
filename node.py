@@ -15,7 +15,7 @@ class Node:
         receive_func: Callable,
         send_func: Callable,
         get_input: Callable,
-        timeout: int = 1,       # Units in seconds
+        timeout: int = 1,  # Units in seconds
     ):
         self.system_config = system_config
         self.node_config = node_config

@@ -64,7 +64,7 @@ class Node:
 
         while True:
             done = True
-            # Make sure we proposal duties and learner duties are completed before returning
+            # Make sure proposal duties and learner duties are completed before returning
             if self.node_config.is_proposer:
                 if self.node_config.node_id not in satisfied_nodes:
                     done = False

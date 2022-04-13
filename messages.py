@@ -42,7 +42,12 @@ def create_message(msg_type: MessageType, **kwargs) -> bytes:
 
 
 def parse_message(byte_data: bytes) -> Optional[Dict]:
-    str_data = byte_data.decode("utf-8")
+    try:
+        str_data = byte_data.decode("utf-8")
+    except Exception:
+        logging.warn("Failed to decode bytes into string")
+        return None
+
     try:
         dict_data = json.loads(str_data)
     except ValueError:

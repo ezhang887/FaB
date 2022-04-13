@@ -118,7 +118,8 @@ class Node:
 
             sender_id, msg_bytes = self.receive_func()
             message = parse_message(msg_bytes)
-            assert message is not None
+            if message is None:
+                continue
 
             # --------------------PROPOSER---------------------
             # proposer.onLearned()

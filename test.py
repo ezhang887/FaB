@@ -8,6 +8,10 @@ from config import NodeConfig, SystemConfig
 from typing import List, Callable, Optional
 
 
+def generate_random_bytes(size=16):
+    return bytes(random.getrandbits(8) for _ in range(size))
+
+
 def run_system(
     N: int,
     system_config: SystemConfig,
@@ -47,7 +51,7 @@ def run_system(
             n.wait()
 
 
-def simple_test(ommission: bool = False):
+def simple_test(ommission: bool = False, equivocation: bool = False):
     f = 1
     P = 3 * f + 1
     A = 5 * f + 1
@@ -76,19 +80,22 @@ def simple_test(ommission: bool = False):
     sends, recvs = simple_router(N)
     faulty_nodes = None
 
-    if ommission:
+    if ommission or equivocation:
         nodes_to_sample = list(range(N))
         nodes_to_sample.remove(leader)
         faulty_nodes = rnd.sample(nodes_to_sample, f)
 
         for n in faulty_nodes:
             print(f"Faulty node: {node_configs[n]}")
-            sends[n] = lambda *args: None
+            if ommission:
+                sends[n] = lambda *args: None
+            elif equivocation:
+                sends[n] = lambda j, *args: sends[i](j, generate_random_bytes())
 
     run_system(N, system_config, node_configs, sends, recvs, faulty_nodes)
 
 
-def simple_test_unique_roles(ommission: bool = False):
+def simple_test_unique_roles(ommission: bool = False, equivocation: bool = False):
     """
     Same as simple_test, but each node has a unique role
     (e.g. a node is either a proposer or acceptor or learner)
@@ -121,14 +128,17 @@ def simple_test_unique_roles(ommission: bool = False):
     sends, recvs = simple_router(N)
     faulty_nodes = None
 
-    if ommission:
+    if ommission or equivocation:
         nodes_to_sample = list(range(N))
         nodes_to_sample.remove(leader)
         faulty_nodes = rnd.sample(nodes_to_sample, f)
 
         for n in faulty_nodes:
             print(f"Faulty node: {node_configs[n]}")
-            sends[n] = lambda *args: None
+            if ommission:
+                sends[n] = lambda *args: None
+            elif equivocation:
+                sends[n] = lambda j, *args: sends[i](j, generate_random_bytes())
 
     run_system(N, system_config, node_configs, sends, recvs, faulty_nodes)
 
@@ -136,5 +146,10 @@ def simple_test_unique_roles(ommission: bool = False):
 simple_test()
 simple_test_unique_roles()
 
+# Ommission: `f` non-leader nodes omit don't send messages
 simple_test(ommission=True)
 simple_test_unique_roles(ommission=True)
+
+# Equivocation: `f` non-leader nodes send random bytes
+simple_test(equivocation=True)
+simple_test_unique_roles(equivocation=True)

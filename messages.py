@@ -11,12 +11,14 @@ class MessageType(Enum):
     ACCEPTED = "ACCEPTED"
     LEARNED = "LEARNED"
     PULL = "PULL"
+    SUSPECT = "SUSPECT"
 
 
 REQUIRED_FIELDS_FOR_TYPE = {
     MessageType.PROPOSE: ["value", "pnumber", "progress_cert"],
     MessageType.ACCEPTED: ["value", "pnumber"],
     MessageType.LEARNED: ["value", "pnumber"],
+    MessageType.SUSPECT: ["regency"],
 }
 
 

@@ -15,7 +15,7 @@ class Node:
         receive_func: Callable,
         send_func: Callable,
         get_input: Callable,
-        timeout: int = 1,  # Units in seconds
+        timeout: int = 5,  # Timeout in seconds
     ):
         self.system_config = system_config
         self.node_config = node_config
@@ -129,9 +129,17 @@ class Node:
                 ):
                     self.multicast_proposers(create_message(MessageType.SATISFIED))
 
-            # TODO: proposer.onStart()
+            # proposer.onStart()
             if self.node_config.is_proposer:
-                pass
+
+                def suspect_leader():
+                    if len(learned_nodes_proposer) < math.ceil(
+                        (self.system_config.L + self.system_config.f + 1) / 2
+                    ):
+                        # TODO: suspect here
+                        pass
+
+                gevent.spawn_later(self.timeout, suspect_leader)
 
             # proposer.onSatisfied()
             if (
@@ -186,7 +194,7 @@ class Node:
                     gevent.spawn_later(self.timeout, send_pull)
 
                 if not started_send_pull:
-                    send_pull()
+                    gevent.spawn_later(self.timeout, send_pull)
                     started_send_pull = True
 
             # learner.onPull()

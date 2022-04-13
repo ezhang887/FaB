@@ -3,25 +3,33 @@ import random
 import gevent  # type: ignore
 from gevent.queue import Queue  # type: ignore
 
+from typing import Optional
 
-def simple_router(N, maxdelay=0.01, seed=None):
+
+def simple_router(
+    N, recv_timeout: int = 5, maxdelay: float = 0.01, seed: Optional[int] = None
+):
     """Builds a set of connected channels, with random delay
     @return (receives, sends)
     """
     rnd = random.Random(seed)
     queues = [Queue() for _ in range(N)]
 
-    def makeSend(i):
-        def _send(j, o):
+    def makeSend(i: int):
+        def _send(j: int, o: bytes):
             delay = rnd.random() * maxdelay
             gevent.spawn_later(delay, queues[j].put, (i, o))
 
         return _send
 
-    def makeRecv(j):
+    def makeRecv(j: int):
         def _recv():
-            (i, o) = queues[j].get()
-            return (i, o)
+            try:
+                (i, o) = queues[j].get(timeout=recv_timeout)
+                return (i, o)
+            except gevent.queue.Empty:
+                # Timeout!
+                return None, None
 
         return _recv
 

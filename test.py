@@ -51,7 +51,9 @@ def run_system(
             n.wait()
 
 
-def simple_test(ommission: bool = False, equivocation: bool = False):
+def simple_test(
+    ommission: bool = False, equivocation: bool = False, leader_ommission: bool = False
+):
     f = 1
     P = 3 * f + 1
     A = 5 * f + 1
@@ -80,22 +82,40 @@ def simple_test(ommission: bool = False, equivocation: bool = False):
     sends, recvs = simple_router(N)
     faulty_nodes = None
 
-    if ommission or equivocation:
-        nodes_to_sample = list(range(N))
-        nodes_to_sample.remove(leader)
-        faulty_nodes = rnd.sample(nodes_to_sample, f)
+    if ommission or equivocation or leader_ommission:
+        if leader_ommission:
+            faulty_nodes = [leader]
+        else:
+            nodes_to_sample = list(range(N))
+            nodes_to_sample.remove(leader)
+            faulty_nodes = rnd.sample(nodes_to_sample, f)
 
         for n in faulty_nodes:
             print(f"Faulty node: {node_configs[n]}")
-            if ommission:
-                sends[n] = lambda *args: None
+            orig_send = sends[n]
+            if ommission or leader_ommission:
+                # Randomly send or omit
+                def new_send(j: int, o: bytes):
+                    if rnd.random() < 0.5:
+                        orig_send(j, o)
+
+                sends[n] = new_send
             elif equivocation:
-                sends[n] = lambda j, *args: sends[i](j, generate_random_bytes())
+                # Randomly send random data or send original data
+                def new_send(j: int, o: bytes):
+                    if rnd.random() < 0.5:
+                        orig_send(j, o)
+                    else:
+                        orig_send(j, generate_random_bytes())
+
+                sends[n] = new_send
 
     run_system(N, system_config, node_configs, sends, recvs, faulty_nodes)
 
 
-def simple_test_unique_roles(ommission: bool = False, equivocation: bool = False):
+def simple_test_unique_roles(
+    ommission: bool = False, equivocation: bool = False, leader_ommission: bool = False
+):
     """
     Same as simple_test, but each node has a unique role
     (e.g. a node is either a proposer or acceptor or learner)
@@ -128,17 +148,33 @@ def simple_test_unique_roles(ommission: bool = False, equivocation: bool = False
     sends, recvs = simple_router(N)
     faulty_nodes = None
 
-    if ommission or equivocation:
-        nodes_to_sample = list(range(N))
-        nodes_to_sample.remove(leader)
-        faulty_nodes = rnd.sample(nodes_to_sample, f)
+    if ommission or equivocation or leader_ommission:
+        if leader_ommission:
+            faulty_nodes = [leader]
+        else:
+            nodes_to_sample = list(range(N))
+            nodes_to_sample.remove(leader)
+            faulty_nodes = rnd.sample(nodes_to_sample, f)
 
         for n in faulty_nodes:
             print(f"Faulty node: {node_configs[n]}")
-            if ommission:
-                sends[n] = lambda *args: None
+            orig_send = sends[n]
+            if ommission or leader_ommission:
+                # Randomly send or omit
+                def new_send(j: int, o: bytes):
+                    if rnd.random() < 0.5:
+                        orig_send(j, o)
+
+                sends[n] = new_send
             elif equivocation:
-                sends[n] = lambda j, *args: sends[i](j, generate_random_bytes())
+                # Randomly send random data or send original data
+                def new_send(j: int, o: bytes):
+                    if rnd.random() < 0.5:
+                        orig_send(j, o)
+                    else:
+                        orig_send(j, generate_random_bytes())
+
+                sends[n] = new_send
 
     run_system(N, system_config, node_configs, sends, recvs, faulty_nodes)
 
@@ -146,10 +182,14 @@ def simple_test_unique_roles(ommission: bool = False, equivocation: bool = False
 simple_test()
 simple_test_unique_roles()
 
-# Ommission: `f` non-leader nodes omit don't send messages
+# Ommission: `f` non-leader nodes randomly don't send messages
 simple_test(ommission=True)
 simple_test_unique_roles(ommission=True)
 
-# Equivocation: `f` non-leader nodes send random bytes
+# Equivocation: `f` non-leader nodes randomly send random bytes
 simple_test(equivocation=True)
 simple_test_unique_roles(equivocation=True)
+
+# Leader randomly decides to not send messages
+simple_test(leader_ommission=True)
+simple_test_unique_roles(leader_ommission=True)

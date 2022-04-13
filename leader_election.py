@@ -10,11 +10,12 @@ import math
 class LeaderElection:
     def __init__(
         self,
-        initial_leader: int,
+        node_id: int,
         system_config: SystemConfig,
         multicast: Callable[[bytes], None],
     ):
-        self.regency = initial_leader
+        self.node_id = node_id
+        self.regency = system_config.leader_id
         self.system_config = system_config
         self.suspects: Dict[int, int] = defaultdict(lambda: 0)
         self.multicast = multicast
@@ -37,12 +38,21 @@ class LeaderElection:
         regency = suspect_message["regency"]
         self.suspects[regency] += 1
 
+        new_leader = False
+
         for r, count in self.suspects.items():
             if count > math.ceil((self.system_config.P + self.system_config.f) / 2):
-                self.regency += 1
-                # TODO: probably need more here..
-                self.proofs.clear()
-                self.suspects.clear()
+                new_leader = True
+                break
+
+        if new_leader:
+            # TODO: probably need more here..
+            self.proofs.clear()
+            self.suspects.clear()
+            self.regency += 1
 
     def consider(self, proof):
         self.proofs.append(proof)
+
+    def is_leader(self):
+        return self.get_leader() == self.node_id

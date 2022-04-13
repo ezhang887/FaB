@@ -63,8 +63,13 @@ class Node:
             value_to_propose = self.get_input()
 
         while True:
+            # Make sure proposal/leader/learner duties are completed before returning
             done = True
-            # Make sure proposal duties and learner duties are completed before returning
+            if self.is_leader:
+                if len(satisfied_nodes) < math.ceil(
+                    (self.system_config.P + self.system_config.f + 1) / 2
+                ):
+                    done = False
             if self.node_config.is_proposer:
                 if self.node_config.node_id not in satisfied_nodes:
                     done = False
@@ -72,7 +77,7 @@ class Node:
                 if learned is None:
                     done = False
 
-            # If this node is only an acceptor, than don't return (TODO: FIX THIS?)
+            # If this node is only an acceptor, return when all other nodes have returned
             if (
                 self.node_config.is_acceptor
                 and not self.node_config.is_proposer

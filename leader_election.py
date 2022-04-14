@@ -29,7 +29,9 @@ class LeaderElection:
         return self.get_regency() % self.system_config.P
 
     def suspect(self, regency):
-        msg_to_send = create_message(MessageType.SUSPECT, regency=regency)
+        msg_to_send = create_message(
+            MessageType.SUSPECT, sender_id=self.node_id, regency=regency
+        )
         self.multicast(msg_to_send)
 
     def on_suspect(self, suspect_message):

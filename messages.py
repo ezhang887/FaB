@@ -22,7 +22,7 @@ REQUIRED_FIELDS_FOR_TYPE = {
 }
 
 
-def create_message(msg_type: MessageType, **kwargs) -> bytes:
+def create_message(msg_type: MessageType, sender_id: int, **kwargs) -> bytes:
     content = {}
     for t, required_fields in REQUIRED_FIELDS_FOR_TYPE.items():
         if msg_type == t:
@@ -38,6 +38,7 @@ def create_message(msg_type: MessageType, **kwargs) -> bytes:
                 content[field] = kwargs[field]
             break
     content["type"] = msg_type.value
+    content["sender_id"] = sender_id
     return json.dumps(content).encode()
 
 

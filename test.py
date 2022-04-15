@@ -1,15 +1,22 @@
 import random
 from gevent.queue import Queue  # type: ignore
+from ecdsa import SigningKey, VerifyingKey  # type: ignore
 
 from router import simple_router
 from node import Node
-from config import NodeConfig, SystemConfig
+from config import NodeConfig, SystemConfig, generate_public_configs
 
-from typing import List, Callable, Optional
+from typing import List, Callable, Optional, Tuple
 
 
-def generate_random_bytes(size=16):
+def generate_random_bytes(size=16) -> bytes:
     return bytes(random.getrandbits(8) for _ in range(size))
+
+
+def generate_keys() -> Tuple[SigningKey, VerifyingKey]:
+    sk = SigningKey.generate()
+    vk = sk.verifying_key
+    return sk, vk
 
 
 def run_system(
@@ -66,7 +73,15 @@ def simple_test(
 
     node_configs: List[NodeConfig] = []
     for i in range(N):
-        node_config = NodeConfig(node_id=i)
+        sk, vk = generate_keys()
+        node_config = NodeConfig(
+            node_id=i,
+            is_acceptor=False,
+            is_proposer=False,
+            is_learner=False,
+            verifying_key=vk,
+            signing_key=sk,
+        )
         node_configs.append(node_config)
 
     for i in range(P):
@@ -77,7 +92,12 @@ def simple_test(
         node_configs[i].is_learner = True
 
     system_config = SystemConfig(
-        leader_id=leader, P=P, A=A, L=L, f=f, all_nodes=node_configs
+        leader_id=leader,
+        P=P,
+        A=A,
+        L=L,
+        f=f,
+        all_nodes=generate_public_configs(node_configs),
     )
     sends, recvs = simple_router(N)
     faulty_nodes = None
@@ -132,7 +152,15 @@ def simple_test_unique_roles(
 
     node_configs: List[NodeConfig] = []
     for i in range(N):
-        node_config = NodeConfig(node_id=i)
+        sk, vk = generate_keys()
+        node_config = NodeConfig(
+            node_id=i,
+            is_acceptor=False,
+            is_proposer=False,
+            is_learner=False,
+            verifying_key=vk,
+            signing_key=sk,
+        )
         node_configs.append(node_config)
 
     for i in range(P):
@@ -143,7 +171,12 @@ def simple_test_unique_roles(
         node_configs[i + P + A].is_learner = True
 
     system_config = SystemConfig(
-        leader_id=leader, P=P, A=A, L=L, f=f, all_nodes=node_configs
+        leader_id=leader,
+        P=P,
+        A=A,
+        L=L,
+        f=f,
+        all_nodes=generate_public_configs(node_configs),
     )
     sends, recvs = simple_router(N)
     faulty_nodes = None

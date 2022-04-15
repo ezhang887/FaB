@@ -1,4 +1,4 @@
-from config import NodeConfig, SystemConfig
+from config import NodeConfig, NodeConfigPublic, SystemConfig
 from messages import create_message, parse_message, MessageType
 from leader_election import LeaderElection
 
@@ -31,7 +31,9 @@ class Node:
         )
 
     def multicast(
-        self, message: bytes, node_filter: Optional[Callable[[NodeConfig], bool]] = None
+        self,
+        message: bytes,
+        node_filter: Optional[Callable[[NodeConfigPublic], bool]] = None,
     ):
         for node in self.system_config.all_nodes:
             if node_filter is not None and node_filter(node):

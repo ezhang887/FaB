@@ -1,3 +1,4 @@
+import base64
 import json
 import logging
 from enum import Enum
@@ -18,7 +19,7 @@ REQUIRED_FIELDS_FOR_TYPE = {
     MessageType.PROPOSE: ["value", "pnumber", "progress_cert"],
     MessageType.ACCEPTED: ["value", "pnumber"],
     MessageType.LEARNED: ["value", "pnumber"],
-    MessageType.SUSPECT: ["regency"],
+    MessageType.SUSPECT: ["regency", "signature"],
 }
 
 
@@ -41,6 +42,9 @@ def create_message(msg_type: MessageType, sender_id: int, **kwargs) -> bytes:
     content["sender_id"] = sender_id
     return json.dumps(content).encode()
 
+def create_signed_message(msg_type: MessageType, sender_id: int, signature: bytes, **kwargs) -> bytes:
+    return create_message(msg_type, sender_id, 
+        signature=base64.b64encode(signature).decode('utf-8'), **kwargs)
 
 def parse_message(byte_data: Optional[bytes]) -> Optional[Dict]:
     if byte_data is None:
@@ -68,6 +72,13 @@ def parse_message(byte_data: Optional[bytes]) -> Optional[Dict]:
         logging.warn(f"Message has invalid type field: {str_data}")
         return None
     dict_data["type"] = msg_type
+
+    if "signature" in dict_data:
+        try:
+            dict_data["signature"] = base64.b64decode(dict_data["signature"].encode('utf-8'))
+        except:
+            logging.warn(f"Message signature could not be decoded")
+            return None
 
     for t, required_fields in REQUIRED_FIELDS_FOR_TYPE.items():
         if msg_type == t:

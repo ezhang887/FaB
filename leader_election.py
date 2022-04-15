@@ -1,26 +1,28 @@
-from config import SystemConfig
+from config import NodeConfig, SystemConfig
 from collections import defaultdict
+import logging
 
-from typing import Dict, Callable, List, Any
-from messages import create_message, MessageType
+from typing import Dict, Callable, Set, Tuple
+from messages import create_signed_message, MessageType
 
 import math
 
+NodeId = int
+Signature = bytes
 
 class LeaderElection:
     def __init__(
         self,
-        node_id: int,
+        node_config: NodeConfig,
         system_config: SystemConfig,
         multicast: Callable[[bytes], None],
     ):
-        self.node_id = node_id
+        self.node_config = node_config
         self.regency = system_config.leader_id
         self.system_config = system_config
-        self.suspects: Dict[int, int] = defaultdict(lambda: 0)
+        self.suspects: Dict[int, Dict[NodeId, Signature]] = defaultdict(lambda: dict())
         self.multicast = multicast
-        # TODO: what is type of proof?
-        self.proofs: List[Any] = []
+        self.proof: Dict[NodeId, Signature] = None
 
     def get_regency(self) -> int:
         return self.regency
@@ -29,8 +31,11 @@ class LeaderElection:
         return self.get_regency() % self.system_config.P
 
     def suspect(self, regency):
-        msg_to_send = create_message(
-            MessageType.SUSPECT, sender_id=self.node_id, regency=regency
+        msg_to_send = create_signed_message(
+            MessageType.SUSPECT, 
+            sender_id=self.node_config.node_id, 
+            signature=self.node_config.signing_key.sign(str(regency).encode()),
+            regency=regency, 
         )
         self.multicast(msg_to_send)
 
@@ -38,23 +43,39 @@ class LeaderElection:
         assert suspect_message["type"] == MessageType.SUSPECT
 
         regency = suspect_message["regency"]
-        self.suspects[regency] += 1
+        if regency < self.regency: # Ignore timeouts for old leaders
+            return
 
-        new_leader = False
+        # Verify signature on message
+        signer_id = suspect_message["sender_id"]
+        vk = self.system_config.all_nodes[signer_id].verifying_key
+        if not vk.verify(suspect_message["signature"], str(suspect_message["regency"]).encode()):
+            return
 
-        for r, count in self.suspects.items():
-            if count > math.ceil((self.system_config.P + self.system_config.f) / 2):
-                new_leader = True
-                break
+        self.suspects[regency][signer_id] = suspect_message["signature"]
+        
+        if len(self.suspects[regency]) > math.ceil((self.system_config.P + self.system_config.f) / 2):
+            self.proof = self.suspects[regency]
+            del self.suspects[regency]
+            self.regency = regency + 1
+            logging.debug(f"Node {self.node_config.node_id} is updating regency to {self.regency}" +
+                f" with proof {self.proof}")
 
-        if new_leader:
-            # TODO: probably need more here..
-            self.proofs.clear()
-            self.suspects.clear()
-            self.regency += 1
+    def consider(self, new_regency, proof):
+        if len(proof) < 0: # Not enough proposers suspected the leader
+            return False
 
-    def consider(self, proof):
-        self.proofs.append(proof)
+        for (signer_id, signature) in proof.values():
+            vk = self.system_config.all_nodes[signer_id].verifying_key
+            if not vk.verify(signature, str(new_regency).encode()):
+                # Signature doesn't match
+                return False
+        
+        # Since a quorum of proposers suspected the last leader, update regency
+        if new_regency > self.regency:
+            self.regency = new_regency
+            self.proof = proof
+        return True
 
     def is_leader(self):
-        return self.get_leader() == self.node_id
+        return self.get_leader() == self.node_config.node_id

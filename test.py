@@ -1,6 +1,7 @@
 import random
 from gevent.queue import Queue  # type: ignore
 from ecdsa import SigningKey, VerifyingKey  # type: ignore
+import logging
 
 from router import simple_router
 from node import Node
@@ -8,6 +9,12 @@ from config import NodeConfig, SystemConfig, generate_public_configs
 
 from typing import List, Callable, Optional, Tuple
 
+logging.basicConfig(
+    filename='test.log', 
+    filemode='w',
+    format='%(asctime)s %(levelname)s:%(message)s', 
+    level=logging.DEBUG
+)
 
 def generate_random_bytes(size=16) -> bytes:
     return bytes(random.getrandbits(8) for _ in range(size))

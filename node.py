@@ -27,7 +27,7 @@ class Node:
 
         self.timeout = timeout
         self.leader_election = LeaderElection(
-            node_config.node_id, self.system_config, self.multicast_proposers
+            node_config, self.system_config, self.multicast_proposers
         )
 
     def multicast(

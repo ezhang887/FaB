@@ -35,6 +35,7 @@ def run_system(
     faulty_node_ids: Optional[List[int]] = None,
 ):
     leader_input = Queue(1)
+    output_queue = Queue()
 
     nodes: List[Node] = []
     for i in range(N):
@@ -44,6 +45,7 @@ def run_system(
             system_config=system_config,
             receive_func=recvs[i],
             send_func=sends[i],
+            output_queue=output_queue,
             get_input=get_input,
         )
         node.start()
@@ -51,18 +53,30 @@ def run_system(
 
     leader_input.put(254)
 
+    nonfaulty_learners = set()
     for n in nodes:
         if faulty_node_ids is not None and n.node_config.node_id in faulty_node_ids:
             continue
+        if not n.node_config.is_learner:
+            continue
+        nonfaulty_learners.add(n.node_config.node_id)
 
-        # TODO: Currently acceptors don't return. Fix this?
-        if n.node_config.is_learner:
-            res = n.wait()
-            assert res[0] == 254
-            assert res[1] == system_config.leader_id
-            print(f"Output from learner {n.node_config.node_id} is {res}")
-        elif n.node_config.is_proposer:
-            n.wait()
+    committed_learners = set()
+
+    while sorted(committed_learners) != sorted(nonfaulty_learners):
+        output = output_queue.get()
+        node_id = output["node_id"]
+
+        if node_id not in nonfaulty_learners:
+            continue
+
+        value = output["value"]
+        assert value[0] == 254
+        assert value[1] == system_config.leader_id
+        committed_learners.add(node_id)
+
+    for n in nodes:
+        n.stop()
 
 
 def simple_test(

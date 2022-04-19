@@ -6,6 +6,7 @@ from leader_election import LeaderElection
 from typing import Callable, Dict, Optional
 import gevent  # type: ignore
 from gevent import Greenlet  # type: ignore
+from gevent.queue import Queue # type: ignore
 import math
 import logging
 
@@ -18,6 +19,7 @@ class Node:
         receive_func: Callable,
         send_func: Callable,
         get_input: Callable,
+        output_queue: Queue,
         timeout: int = 5,  # Timeout in seconds
     ):
         self.system_config = system_config
@@ -26,6 +28,7 @@ class Node:
         self.receive_func = receive_func
         self.send_func = send_func
         self.get_input = get_input
+        self.output_queue = output_queue
 
         self.timeout = timeout
         self.leader_election = LeaderElection(
@@ -40,6 +43,13 @@ class Node:
         for node in self.system_config.all_nodes:
             if node_filter is not None and node_filter(node):
                 self.send_func(node.node_id, message)
+
+    def commit(self, value):
+        output = {
+            "node_id": self.node_config.node_id,
+            "value": value,
+        }
+        self.output_queue.put(output)
 
     def multicast_acceptors(self, message: bytes):
         self.multicast(message, node_filter=lambda n: n.is_acceptor)
@@ -284,6 +294,7 @@ class Node:
                         pnumber=message["pnumber"],
                     )
                     self.multicast_proposers(msg_to_send)
+                    self.commit(learned)
 
             # learner.onStart()
             if self.node_config.is_learner:
@@ -330,12 +341,12 @@ class Node:
 
                 if num_learns >= self.system_config.f + 1:
                     learned = (message["value"], message["pnumber"])
+                    self.commit(learned)
                     # print(f"Learner {self.node_config.node_id} has LEARNED {learned}")
 
     def start(self):
         self.thread = Greenlet(self.run)
         self.thread.start()
 
-    def wait(self):
-        self.thread.join()
-        return self.thread.value
+    def stop(self):
+        self.thread.kill()

@@ -150,7 +150,6 @@ class Node:
 
                     msg_to_send = create_message(
                         MessageType.PROPOSE,
-                        sender_id=self.node_config.node_id,
                         value=value_to_propose,
                         pnumber=self.system_config.leader_id,
                         progress_cert="",
@@ -164,7 +163,7 @@ class Node:
                     send_proposals()
                     started_send_proposals = True
 
-            msg_bytes = self.receive_func()
+            sender_id, msg_bytes = self.receive_func()
             message = parse_message(msg_bytes)
 
             # leader receives REPLY
@@ -185,15 +184,11 @@ class Node:
                 and self.node_config.is_proposer
                 and message["type"] == MessageType.LEARNED
             ):
-                learned_nodes_proposer.add(message["sender_id"])
+                learned_nodes_proposer.add(sender_id)
                 if len(learned_nodes_proposer) >= math.ceil(
                     (self.system_config.L + self.system_config.f + 1) / 2
                 ):
-                    self.multicast_proposers(
-                        create_message(
-                            MessageType.SATISFIED, sender_id=self.node_config.node_id
-                        )
-                    )
+                    self.multicast_proposers(create_message(MessageType.SATISFIED))
 
             # proposer.onStart()
             if self.node_config.is_proposer:
@@ -216,7 +211,7 @@ class Node:
                 and self.node_config.is_proposer
                 and message["type"] == MessageType.SATISFIED
             ):
-                satisfied_nodes.add(message["sender_id"])
+                satisfied_nodes.add(sender_id)
 
             # If the proposer receives a SUSPECT message
             if (
@@ -236,7 +231,6 @@ class Node:
                 accepted = message["value"], message["pnumber"]
                 msg_to_send = create_message(
                     MessageType.ACCEPTED,
-                    sender_id=self.node_config.node_id,
                     value=message["value"],
                     pnumber=message["pnumber"],
                 )
@@ -273,10 +267,7 @@ class Node:
                 and self.node_config.is_learner
                 and message["type"] == MessageType.ACCEPTED
             ):
-                accepted_nodes[message["sender_id"]] = (
-                    message["value"],
-                    message["pnumber"],
-                )
+                accepted_nodes[sender_id] = (message["value"], message["pnumber"])
 
                 num_accepts = 0
                 for v in accepted_nodes.values():
@@ -289,7 +280,6 @@ class Node:
                     learned = (message["value"], message["pnumber"])
                     msg_to_send = create_message(
                         MessageType.LEARNED,
-                        sender_id=self.node_config.node_id,
                         value=message["value"],
                         pnumber=message["pnumber"],
                     )
@@ -302,9 +292,7 @@ class Node:
                     if learned is not None:
                         return
 
-                    msg_to_send = create_message(
-                        MessageType.PULL, sender_id=self.node_config.node_id
-                    )
+                    msg_to_send = create_message(MessageType.PULL)
                     self.multicast_learners(msg_to_send)
 
                     # Re-schedule this later
@@ -323,12 +311,9 @@ class Node:
                 if learned is not None:
                     value, pnumber = learned
                     msg_to_send = create_message(
-                        MessageType.LEARNED,
-                        sender_id=self.node_config.node_id,
-                        value=value,
-                        pnumber=pnumber,
+                        MessageType.LEARNED, value=value, pnumber=pnumber
                     )
-                    self.send_func(message["sender_id"], msg_to_send)
+                    self.send_func(sender_id, msg_to_send)
 
             # learner.onLearned()
             if (
@@ -336,10 +321,7 @@ class Node:
                 and self.node_config.is_learner
                 and message["type"] == MessageType.LEARNED
             ):
-                learned_nodes[message["sender_id"]] = (
-                    message["value"],
-                    message["pnumber"],
-                )
+                learned_nodes[sender_id] = (message["value"], message["pnumber"])
 
                 num_learns = 0
                 for v in learned_nodes.values():

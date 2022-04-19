@@ -3,7 +3,7 @@ from collections import defaultdict
 import logging
 
 from typing import Dict, Callable, Set, Tuple
-from messages import create_signed_message, MessageType
+from messages import create_signed_message, decode_signature, MessageType
 
 import math
 
@@ -49,7 +49,9 @@ class LeaderElection:
         # Verify signature on message
         signer_id = suspect_message["sender_id"]
         vk = self.system_config.all_nodes[signer_id].verifying_key
-        if not vk.verify(suspect_message["signature"], str(suspect_message["regency"]).encode()):
+        signature = decode_signature(suspect_message["signature"])
+        if not vk.verify(signature, str(suspect_message["regency"]).encode()):
+            logging.warn(f"Signature verification failed for {suspect_message}")
             return
 
         self.suspects[regency][signer_id] = suspect_message["signature"]
@@ -62,6 +64,10 @@ class LeaderElection:
                 f" with proof {self.proof}")
 
     def consider(self, new_regency, proof):
+        if new_regency == self.system_config.leader_id:
+            # Initial leader doesn't need proof
+            return True
+
         if len(proof) < 0: # Not enough proposers suspected the leader
             return False
 

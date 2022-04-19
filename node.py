@@ -1,11 +1,13 @@
+from collections import defaultdict
 from config import NodeConfig, NodeConfigPublic, SystemConfig
 from messages import create_message, parse_message, MessageType
 from leader_election import LeaderElection
 
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
 import gevent  # type: ignore
 from gevent import Greenlet  # type: ignore
 import math
+import logging
 
 
 class Node:
@@ -52,6 +54,7 @@ class Node:
         if self.node_config.is_proposer:
             satisfied_nodes = set()
             learned_nodes_proposer = set()
+            replies_from_acceptors = defaultdict(lambda: dict())
 
         if self.node_config.is_acceptor:
             accepted = None
@@ -63,6 +66,7 @@ class Node:
 
         started_send_pull = False
         started_send_proposals = False
+        started_send_queries = False
         started_suspect = False
 
         if self.leader_election.is_leader():
@@ -99,9 +103,43 @@ class Node:
                     return learned
                 else:
                     return None
+            
+            # --------------------LEADER---------------------
+            # leader.onElected()
+            if self.leader_election.is_leader():
+                assert self.node_config.is_proposer
+
+                def send_queries():
+                    if len(replies_from_acceptors[self.leader_election.get_regency()]) >= (
+                        self.system_config.A - self.system_config.f
+                    ):
+                        return
+                    elif not self.leader_election.is_leader(): 
+                        # Timed out, let new leader take over
+                        return
+
+                    msg_to_send = create_message(
+                        MessageType.QUERY,
+                        sender_id=self.node_config.node_id,
+                        pnumber=self.system_config.leader_id,
+                        election_proof=self.leader_election.proof
+                    )
+                    self.multicast_acceptors(msg_to_send)
+
+                    # Re-schedule this later
+                    gevent.spawn_later(self.timeout * 2, send_queries)
+
+                if not started_send_queries:
+                    send_queries()
+                    started_send_queries = True
 
             # leader.onStart()
-            if self.leader_election.is_leader():
+            if (
+                self.leader_election.is_leader() 
+                and len(replies_from_acceptors[self.leader_election.get_regency()]) >= (
+                    self.system_config.A - self.system_config.f
+                )
+            ):
                 assert self.node_config.is_proposer
 
                 def send_proposals():
@@ -129,6 +167,17 @@ class Node:
             msg_bytes = self.receive_func()
             message = parse_message(msg_bytes)
 
+            # leader receives REPLY
+            if (
+                message is not None
+                and self.leader_election.is_leader()
+                and message["type"] == MessageType.REPLY
+            ):
+                # TODO: verify signature on reply
+                replies_from_acceptors[self.leader_election.get_regency()][message["sender_id"]] = (
+                    message["accepted_value"]
+                )
+            
             # --------------------PROPOSER---------------------
             # proposer.onLearned()
             if (
@@ -192,6 +241,30 @@ class Node:
                     pnumber=message["pnumber"],
                 )
                 self.multicast_learners(msg_to_send)
+
+            
+            # acceptor.onQuery()
+            if (
+                message is not None
+                and self.node_config.is_acceptor
+                and message["type"] == MessageType.QUERY
+            ):
+                if (
+                    self.leader_election.consider(message["pnumber"], message["election_proof"])
+                    and self.leader_election.get_regency() == message["pnumber"]
+                ):  
+                    logging.debug(f"Node {self.node_config.node_id} received query {message}")
+                    # TODO: this needs to be signed
+                    msg_to_send = create_message(
+                        MessageType.REPLY,
+                        sender_id=self.node_config.node_id,
+                        accepted_value=accepted,
+                        pnumber=message["pnumber"],
+                        commit_proof=""
+                    )
+                    # TODO: really only need to send to leader
+                    self.multicast_proposers(msg_to_send)
+
 
             # --------------------LEARNER---------------------
             # learner.onAccepted()

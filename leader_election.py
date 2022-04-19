@@ -39,7 +39,7 @@ class LeaderElection:
         )
         self.multicast(msg_to_send)
 
-    def on_suspect(self, suspect_message):
+    def on_suspect(self, suspect_message, signer_id):
         assert suspect_message["type"] == MessageType.SUSPECT
 
         regency = suspect_message["regency"]
@@ -47,7 +47,6 @@ class LeaderElection:
             return
 
         # Verify signature on message
-        signer_id = suspect_message["sender_id"]
         vk = self.system_config.all_nodes[signer_id].verifying_key
         signature = decode_signature(suspect_message["signature"])
         if not vk.verify(signature, str(suspect_message["regency"]).encode()):

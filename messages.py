@@ -45,9 +45,8 @@ def create_message(msg_type: MessageType, **kwargs) -> bytes:
     content["type"] = msg_type.value
     return json.dumps(content).encode()
 
-def create_signed_message(msg_type: MessageType, sender_id: int, signature: bytes, **kwargs) -> bytes:
-    return create_message(msg_type, sender_id, 
-        signature=encode_signature(signature), **kwargs)
+def create_signed_message(msg_type: MessageType, signature: bytes, **kwargs) -> bytes:
+    return create_message(msg_type, signature=encode_signature(signature), **kwargs)
 
 def encode_signature(signature: bytes) -> str:
     return base64.b64encode(signature).decode('utf-8')

@@ -173,7 +173,7 @@ class Node:
                 and message["type"] == MessageType.REPLY
             ):
                 # TODO: verify signature on reply
-                replies_from_acceptors[self.leader_election.get_regency()][message["sender_id"]] = (
+                replies_from_acceptors[self.leader_election.get_regency()][sender_id] = (
                     message["accepted_value"]
                 )
             
@@ -219,7 +219,7 @@ class Node:
                 and self.node_config.is_proposer
                 and message["type"] == MessageType.SUSPECT
             ):
-                self.leader_election.on_suspect(message)
+                self.leader_election.on_suspect(message, sender_id)
 
             # --------------------ACCEPTOR---------------------
             # acceptor.onPropose()

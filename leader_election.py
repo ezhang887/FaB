@@ -3,7 +3,7 @@ from collections import defaultdict
 import logging
 
 from typing import Dict, Callable, Set, Tuple
-from messages import create_signed_message, decode_signature, MessageType
+from messages import Message, decode_signature, MessageType
 
 import math
 
@@ -31,30 +31,29 @@ class LeaderElection:
         return self.get_regency() % self.system_config.P
 
     def suspect(self, regency):
-        msg_to_send = create_signed_message(
+        msg_to_send = Message(
             MessageType.SUSPECT, 
-            sender_id=self.node_config.node_id, 
-            signature=self.node_config.signing_key.sign(str(regency).encode()),
+            sender_id=self.node_config.node_id,
             regency=regency, 
         )
+        msg_to_send.sign(self.node_config.signing_key)
         self.multicast(msg_to_send)
 
     def on_suspect(self, suspect_message):
-        assert suspect_message["type"] == MessageType.SUSPECT
+        assert suspect_message.type == MessageType.SUSPECT
 
-        regency = suspect_message["regency"]
+        regency = suspect_message.get_field("regency")
         if regency < self.regency: # Ignore timeouts for old leaders
             return
 
         # Verify signature on message
-        signer_id = suspect_message["sender_id"]
+        signer_id = suspect_message.sender_id
         vk = self.system_config.all_nodes[signer_id].verifying_key
-        signature = decode_signature(suspect_message["signature"])
-        if not vk.verify(signature, str(suspect_message["regency"]).encode()):
+        if not suspect_message.verify(vk):
             logging.warn(f"Signature verification failed for {suspect_message}")
             return
 
-        self.suspects[regency][signer_id] = suspect_message["signature"]
+        self.suspects[regency][signer_id] = suspect_message.__dict__()
         
         if len(self.suspects[regency]) > math.ceil((self.system_config.P + self.system_config.f) / 2):
             self.proof = self.suspects[regency]

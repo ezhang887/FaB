@@ -1,6 +1,6 @@
 from collections import defaultdict
 from config import NodeConfig, NodeConfigPublic, SystemConfig
-from messages import create_message, parse_message, MessageType
+from messages import Message, parse_message, MessageType
 from leader_election import LeaderElection
 
 from typing import Callable, Dict, Optional
@@ -34,20 +34,21 @@ class Node:
 
     def multicast(
         self,
-        message: bytes,
+        message: Message,
         node_filter: Optional[Callable[[NodeConfigPublic], bool]] = None,
     ):
+        encoded_message = message.encode()
         for node in self.system_config.all_nodes:
             if node_filter is not None and node_filter(node):
-                self.send_func(node.node_id, message)
+                self.send_func(node.node_id, encoded_message)
 
-    def multicast_acceptors(self, message: bytes):
+    def multicast_acceptors(self, message: Message):
         self.multicast(message, node_filter=lambda n: n.is_acceptor)
 
-    def multicast_learners(self, message: bytes):
+    def multicast_learners(self, message: Message):
         self.multicast(message, node_filter=lambda n: n.is_learner)
 
-    def multicast_proposers(self, message: bytes):
+    def multicast_proposers(self, message: Message):
         self.multicast(message, node_filter=lambda n: n.is_proposer)
 
     def run(self):
@@ -104,6 +105,9 @@ class Node:
                 else:
                     return None
             
+            msg_bytes = self.receive_func()
+            message = parse_message(msg_bytes)
+
             # --------------------LEADER---------------------
             # leader.onElected()
             if self.leader_election.is_leader():
@@ -118,7 +122,7 @@ class Node:
                         # Timed out, let new leader take over
                         return
 
-                    msg_to_send = create_message(
+                    msg_to_send = Message(
                         MessageType.QUERY,
                         sender_id=self.node_config.node_id,
                         pnumber=self.system_config.leader_id,
@@ -148,7 +152,7 @@ class Node:
                     ):
                         return
 
-                    msg_to_send = create_message(
+                    msg_to_send = Message(
                         MessageType.PROPOSE,
                         sender_id=self.node_config.node_id,
                         value=value_to_propose,
@@ -164,18 +168,15 @@ class Node:
                     send_proposals()
                     started_send_proposals = True
 
-            msg_bytes = self.receive_func()
-            message = parse_message(msg_bytes)
-
             # leader receives REPLY
             if (
                 message is not None
                 and self.leader_election.is_leader()
-                and message["type"] == MessageType.REPLY
+                and message.type == MessageType.REPLY
             ):
                 # TODO: verify signature on reply
-                replies_from_acceptors[self.leader_election.get_regency()][message["sender_id"]] = (
-                    message["accepted_value"]
+                replies_from_acceptors[self.leader_election.get_regency()][message.sender_id] = (
+                    message.get_field("accepted_value")
                 )
             
             # --------------------PROPOSER---------------------
@@ -183,14 +184,14 @@ class Node:
             if (
                 message is not None
                 and self.node_config.is_proposer
-                and message["type"] == MessageType.LEARNED
+                and message.type == MessageType.LEARNED
             ):
-                learned_nodes_proposer.add(message["sender_id"])
+                learned_nodes_proposer.add(message.sender_id)
                 if len(learned_nodes_proposer) >= math.ceil(
                     (self.system_config.L + self.system_config.f + 1) / 2
                 ):
                     self.multicast_proposers(
-                        create_message(
+                        Message(
                             MessageType.SATISFIED, sender_id=self.node_config.node_id
                         )
                     )
@@ -214,15 +215,15 @@ class Node:
             if (
                 message is not None
                 and self.node_config.is_proposer
-                and message["type"] == MessageType.SATISFIED
+                and message.type == MessageType.SATISFIED
             ):
-                satisfied_nodes.add(message["sender_id"])
-
+                satisfied_nodes.add(message.sender_id)
+            
             # If the proposer receives a SUSPECT message
             if (
                 message is not None
                 and self.node_config.is_proposer
-                and message["type"] == MessageType.SUSPECT
+                and message.type == MessageType.SUSPECT
             ):
                 self.leader_election.on_suspect(message)
 
@@ -231,14 +232,14 @@ class Node:
             if (
                 message is not None
                 and self.node_config.is_acceptor
-                and message["type"] == MessageType.PROPOSE
+                and message.type == MessageType.PROPOSE
             ):
-                accepted = message["value"], message["pnumber"]
-                msg_to_send = create_message(
+                accepted = message.get_field("value"), message.get_field("pnumber")
+                msg_to_send = Message(
                     MessageType.ACCEPTED,
                     sender_id=self.node_config.node_id,
-                    value=message["value"],
-                    pnumber=message["pnumber"],
+                    value=message.get_field("value"),
+                    pnumber=message.get_field("pnumber"),
                 )
                 self.multicast_learners(msg_to_send)
 
@@ -247,19 +248,19 @@ class Node:
             if (
                 message is not None
                 and self.node_config.is_acceptor
-                and message["type"] == MessageType.QUERY
+                and message.type == MessageType.QUERY
             ):
                 if (
-                    self.leader_election.consider(message["pnumber"], message["election_proof"])
-                    and self.leader_election.get_regency() == message["pnumber"]
+                    self.leader_election.consider(message.get_field("pnumber"), message.get_field("election_proof"))
+                    and self.leader_election.get_regency() == message.get_field("pnumber")
                 ):  
                     logging.debug(f"Node {self.node_config.node_id} received query {message}")
                     # TODO: this needs to be signed
-                    msg_to_send = create_message(
+                    msg_to_send = Message(
                         MessageType.REPLY,
                         sender_id=self.node_config.node_id,
                         accepted_value=accepted,
-                        pnumber=message["pnumber"],
+                        pnumber=message.get_field("pnumber"),
                         commit_proof=""
                     )
                     # TODO: really only need to send to leader
@@ -271,27 +272,27 @@ class Node:
             if (
                 message is not None
                 and self.node_config.is_learner
-                and message["type"] == MessageType.ACCEPTED
+                and message.type == MessageType.ACCEPTED
             ):
-                accepted_nodes[message["sender_id"]] = (
-                    message["value"],
-                    message["pnumber"],
+                accepted_nodes[message.sender_id] = (
+                    message.get_field("value"),
+                    message.get_field("pnumber"),
                 )
 
                 num_accepts = 0
                 for v in accepted_nodes.values():
-                    if v == (message["value"], message["pnumber"]):
+                    if v == (message.get_field("value"), message.get_field("pnumber")):
                         num_accepts += 1
 
                 if num_accepts >= math.ceil(
                     (self.system_config.A + 3 * self.system_config.f + 1) / 2
                 ):
-                    learned = (message["value"], message["pnumber"])
-                    msg_to_send = create_message(
+                    learned = (message.get_field("value"), message.get_field("pnumber"))
+                    msg_to_send = Message(
                         MessageType.LEARNED,
                         sender_id=self.node_config.node_id,
-                        value=message["value"],
-                        pnumber=message["pnumber"],
+                        value=message.get_field("value"),
+                        pnumber=message.get_field("pnumber"),
                     )
                     self.multicast_proposers(msg_to_send)
 
@@ -302,7 +303,7 @@ class Node:
                     if learned is not None:
                         return
 
-                    msg_to_send = create_message(
+                    msg_to_send = Message(
                         MessageType.PULL, sender_id=self.node_config.node_id
                     )
                     self.multicast_learners(msg_to_send)
@@ -318,36 +319,36 @@ class Node:
             if (
                 message is not None
                 and self.node_config.is_learner
-                and message["type"] == MessageType.PULL
+                and message.type == MessageType.PULL
             ):
                 if learned is not None:
                     value, pnumber = learned
-                    msg_to_send = create_message(
+                    msg_to_send = Message(
                         MessageType.LEARNED,
                         sender_id=self.node_config.node_id,
                         value=value,
                         pnumber=pnumber,
                     )
-                    self.send_func(message["sender_id"], msg_to_send)
+                    self.send_func(message.sender_id, msg_to_send)
 
             # learner.onLearned()
             if (
                 message is not None
                 and self.node_config.is_learner
-                and message["type"] == MessageType.LEARNED
+                and message.type == MessageType.LEARNED
             ):
-                learned_nodes[message["sender_id"]] = (
-                    message["value"],
-                    message["pnumber"],
+                learned_nodes[message.sender_id] = (
+                    message.get_field("value"),
+                    message.get_field("pnumber"),
                 )
 
                 num_learns = 0
                 for v in learned_nodes.values():
-                    if v == (message["value"], message["pnumber"]):
+                    if v == (message.get_field("value"), message.get_field("pnumber")):
                         num_learns += 1
 
                 if num_learns >= self.system_config.f + 1:
-                    learned = (message["value"], message["pnumber"])
+                    learned = (message.get_field("value"), message.get_field("pnumber"))
                     # print(f"Learner {self.node_config.node_id} has LEARNED {learned}")
 
     def start(self):

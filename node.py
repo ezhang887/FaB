@@ -1,5 +1,5 @@
 from collections import defaultdict
-from progress_certificate import CommitProof
+from progress_certificate import CommitProof, ProgressCertificate
 from utils.config import NodeConfig, NodeConfigPublic, SystemConfig
 from messages import Message, parse_message, MessageType
 from leader_election import LeaderElection
@@ -56,7 +56,8 @@ class Node:
         if self.node_config.is_proposer:
             satisfied_nodes = set()
             learned_nodes_proposer = set()
-            replies_from_acceptors = defaultdict(lambda: dict())
+            progress_cert = ProgressCertificate(self.system_config)
+            original_proposal = self.get_input()
 
         if self.node_config.is_acceptor:
             accepted = None
@@ -72,12 +73,6 @@ class Node:
         started_send_proposals = False
         started_send_queries = False
         started_suspect = False
-
-        if self.leader_election.is_leader():
-            value_to_propose = self.get_input()
-        else:
-            # TODO: fix this - don't hardcode, when new leader is elected use progress certificate to determine this
-            value_to_propose = 254
 
         while True:
             # Make sure proposal/leader/learner duties are completed before returning
@@ -117,9 +112,7 @@ class Node:
                 assert self.node_config.is_proposer
 
                 def send_queries():
-                    if len(replies_from_acceptors[self.leader_election.get_regency()]) >= (
-                        self.system_config.A - self.system_config.f
-                    ):
+                    if progress_cert.has_quorum():
                         return
                     elif not self.leader_election.is_leader(): 
                         # Timed out, let new leader take over
@@ -143,11 +136,12 @@ class Node:
             # leader.onStart()
             if (
                 self.leader_election.is_leader() 
-                and len(replies_from_acceptors[self.leader_election.get_regency()]) >= (
-                    self.system_config.A - self.system_config.f
-                )
+                and progress_cert.has_quorum()
             ):
                 assert self.node_config.is_proposer
+                value_to_propose = progress_cert.get_value_to_propose(
+                    original_proposal, self.leader_election.get_regency()
+                )
 
                 def send_proposals():
                     if len(satisfied_nodes) >= math.ceil(
@@ -160,7 +154,7 @@ class Node:
                         sender_id=self.node_config.node_id,
                         value=value_to_propose,
                         pnumber=self.system_config.leader_id,
-                        progress_cert="",
+                        progress_cert=progress_cert.as_list()
                     )
                     self.multicast_acceptors(msg_to_send)
 
@@ -177,10 +171,7 @@ class Node:
                 and self.leader_election.is_leader()
                 and message.type == MessageType.REPLY
             ):
-                # TODO: verify signature on reply
-                replies_from_acceptors[self.leader_election.get_regency()][message.sender_id] = (
-                    message.get_field("accepted_value")
-                )
+                progress_cert.add_part(message)
             
             # --------------------PROPOSER---------------------
             # proposer.onLearned()
@@ -267,7 +258,7 @@ class Node:
                         sender_id=self.node_config.node_id,
                         accepted_value=accepted,
                         pnumber=message.get_field("pnumber"),
-                        commit_proof=commit_proof.__dict__()
+                        commit_proof=commit_proof.as_list()
                     )
                     msg_to_send.sign(self.node_config.signing_key)
                     # TODO: really only need to send to leader
@@ -292,7 +283,7 @@ class Node:
                     msg_to_send = Message(
                         MessageType.COMMITPROOF,
                         sender_id=self.node_config.node_id,
-                        commit_proof=commit_proof.__dict__()
+                        commit_proof=commit_proof.as_list()
                     )
                     self.multicast_learners(msg_to_send)
 

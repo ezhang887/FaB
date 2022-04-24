@@ -1,10 +1,10 @@
 import logging
 import math
-from typing import Dict, Tuple
+from typing import List, Dict, Tuple
 
 from utils.config import SystemConfig
 from utils.types import NodeId, RegencyNumber   
-from messages import Message, MessageType
+from messages import Message, MessageType, parse_message
 
 class CommitProof:
     def __init__(self, system_config: SystemConfig):
@@ -40,14 +40,74 @@ class CommitProof:
 
         return vote_count >= quorum_needed
 
-    def __dict__(self) -> Dict:
-        return {id: message.__dict__() for id, message in self.accepted_values.items()}
-class ProgressCertificate:
-    def __init__(self):
-        pass
+    def as_list(self) -> List:
+        return [message.__dict__() for message in self.accepted_values.values()]
 
-    def get_quorum_locked_value(self) -> int:
-        return None
+    @classmethod
+    def decode(cls, system_config: SystemConfig, encoded_accept_messages: List[Dict]):
+        commit_proof = CommitProof(system_config)
+
+        try:
+            for encoded_message in encoded_accept_messages:
+                commit_proof.add_part(parse_message(encoded_message))
+        except Exception as e:
+            logging.warn(f"Failed to decode commit proof: {e}")
+            return CommitProof(system_config)
+        
+        return commit_proof
+
+
+class ProgressCertificate:
+    def __init__(self, system_config: SystemConfig):
+        self.replies: Dict[NodeId, Message] = {}
+        self.system_config = system_config
     
+    def add_part(self, reply_message: Message):
+        assert reply_message.type == MessageType.REPLY
+
+        vk = self.system_config.all_nodes[reply_message.sender_id].verifying_key
+        if not reply_message.verify(vk):
+            logging.warn(f"Signature verification failed for {reply_message}")
+            return
+
+        self.replies[reply_message.sender_id] = reply_message
+
+    def has_quorum(self) -> bool:
+        return len(self.replies) >= self.system_config.A - self.system_config.f
+
     def vouches_for(self, value: int, pnumber: RegencyNumber) -> bool:
-        return False
+        counts = {}
+        for reply in self.replies.values():
+            accepted_value = reply.get_field("accepted_value")
+            if accepted_value is not None:
+                counts[accepted_value] = counts.get(accepted_value, 0) + 1
+        
+        for reply_value, count in counts.items():
+            if (
+                reply_value != value 
+                and count >= math.ceil((self.system_config.A - self.system_config.f + 1) / 2)
+            ):
+                return False
+
+        for reply in self.replies.values():
+            commit_proof = CommitProof.decode(self.system_config, reply.get_field("commit_proof"))
+            accepted_value = reply.get_field("accepted_value")
+
+            if value != accepted_value and commit_proof.valid(accepted_value, pnumber):
+                return False
+
+        return True
+
+    def get_value_to_propose(self, original_proposal: int, pnumber: int) -> int:
+        accepted_values = set([
+            reply.get_field("accepted_value") for reply in self.replies.values()
+        ])
+        
+        for accepted_value in accepted_values:
+            if accepted_value is not None and self.vouches_for(accepted_value, pnumber):
+                return accepted_value
+        
+        return original_proposal    
+
+    def as_list(self) -> Dict:
+        return [message.__dict__() for message in self.replies.values()]

@@ -34,22 +34,23 @@ def run_system(
     recvs: List[Callable[[int], Callable[[int, int], None]]],
     faulty_node_ids: Optional[List[int]] = None,
 ):
-    leader_input = Queue(1)
+    inputs = [Queue(1) for i in range(N)]
 
     nodes: List[Node] = []
     for i in range(N):
-        get_input = leader_input.get if i == system_config.leader_id else None
         node = Node(
             node_config=node_configs[i],
             system_config=system_config,
             receive_func=recvs[i],
             send_func=sends[i],
-            get_input=get_input,
+            get_input=inputs[i].get,
         )
         node.start()
         nodes.append(node)
 
-    leader_input.put(254)
+    for i in range(N):
+        # TODO: give different original proposal values to different nodes
+        inputs[i].put(254)
 
     for n in nodes:
         if faulty_node_ids is not None and n.node_config.node_id in faulty_node_ids:
@@ -58,9 +59,9 @@ def run_system(
         # TODO: Currently acceptors don't return. Fix this?
         if n.node_config.is_learner:
             res = n.wait()
+            print(f"Output from learner {n.node_config.node_id} is {res}")
             assert res[0] == 254
             assert res[1] == system_config.leader_id
-            print(f"Output from learner {n.node_config.node_id} is {res}")
         elif n.node_config.is_proposer:
             n.wait()
 

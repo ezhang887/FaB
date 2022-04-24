@@ -15,6 +15,7 @@ class MessageType(Enum):
     SUSPECT = "SUSPECT"
     QUERY = "QUERY"
     REPLY = "REPLY"
+    COMMITPROOF = "COMMITPROOF"
 
 
 REQUIRED_FIELDS_FOR_TYPE = {
@@ -23,7 +24,8 @@ REQUIRED_FIELDS_FOR_TYPE = {
     MessageType.LEARNED: ["value", "pnumber"],
     MessageType.SUSPECT: ["regency"],
     MessageType.QUERY: ["pnumber", "election_proof"],
-    MessageType.REPLY: ["accepted_value", "pnumber", "commit_proof"]
+    MessageType.REPLY: ["accepted_value", "pnumber", "commit_proof"],
+    MessageType.COMMITPROOF: ["commit_proof"]
 }
 
 

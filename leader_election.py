@@ -1,14 +1,13 @@
-from config import NodeConfig, SystemConfig
 from collections import defaultdict
+import math
 import logging
 
 from typing import Dict, Callable, Set, Tuple
+
 from messages import Message, decode_signature, MessageType
+from utils.config import NodeConfig, SystemConfig
+from utils.types import RegencyNumber, NodeId
 
-import math
-
-NodeId = int
-Signature = bytes
 
 class LeaderElection:
     def __init__(
@@ -20,9 +19,9 @@ class LeaderElection:
         self.node_config = node_config
         self.regency = system_config.leader_id
         self.system_config = system_config
-        self.suspects: Dict[int, Dict[NodeId, Signature]] = defaultdict(lambda: dict())
+        self.suspects: Dict[RegencyNumber, Dict[NodeId, Dict]] = defaultdict(lambda: dict())
         self.multicast = multicast
-        self.proof: Dict[NodeId, Signature] = None
+        self.proof: Dict[NodeId, Dict] = None
 
     def get_regency(self) -> int:
         return self.regency

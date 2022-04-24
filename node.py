@@ -1,5 +1,6 @@
 from collections import defaultdict
-from config import NodeConfig, NodeConfigPublic, SystemConfig
+from progress_certificate import CommitProof
+from utils.config import NodeConfig, NodeConfigPublic, SystemConfig
 from messages import Message, parse_message, MessageType
 from leader_election import LeaderElection
 
@@ -59,6 +60,8 @@ class Node:
 
         if self.node_config.is_acceptor:
             accepted = None
+            tentative_commit_proof = CommitProof(self.system_config)
+            commit_proof = None
 
         if self.node_config.is_learner:
             accepted_nodes = dict()
@@ -242,6 +245,9 @@ class Node:
                     pnumber=message.get_field("pnumber"),
                 )
                 self.multicast_learners(msg_to_send)
+                
+                msg_to_send.sign(self.node_config.signing_key)
+                self.multicast_acceptors(msg_to_send)
 
             
             # acceptor.onQuery()
@@ -255,7 +261,7 @@ class Node:
                     and self.leader_election.get_regency() == message.get_field("pnumber")
                 ):  
                     logging.debug(f"Node {self.node_config.node_id} received query {message}")
-                    # TODO: this needs to be signed
+                    
                     msg_to_send = Message(
                         MessageType.REPLY,
                         sender_id=self.node_config.node_id,
@@ -263,8 +269,32 @@ class Node:
                         pnumber=message.get_field("pnumber"),
                         commit_proof=""
                     )
+                    msg_to_send.sign(self.node_config.signing_key)
                     # TODO: really only need to send to leader
                     self.multicast_proposers(msg_to_send)
+
+
+            # acceptor.onAccepted()
+            if (
+                message is not None
+                and self.node_config.is_acceptor
+                and message.type == MessageType.ACCEPTED
+                and message.verify(self.system_config.all_nodes[message.sender_id].verifying_key)
+            ):
+                tentative_commit_proof.add_part(message)
+                
+                if tentative_commit_proof.valid(
+                    message.get_field("value"), self.leader_election.get_regency()
+                ):
+                    commit_proof = tentative_commit_proof
+                    logging.debug(f"Node {self.node_config.node_id} has constructed commit proof")
+
+                    msg_to_send = Message(
+                        MessageType.COMMITPROOF,
+                        sender_id=self.node_config.node_id,
+                        commit_proof=commit_proof
+                    )
+                    self.multicast_learners(msg_to_send)
 
 
             # --------------------LEARNER---------------------

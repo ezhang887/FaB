@@ -5,7 +5,7 @@ import logging
 
 from router import simple_router
 from node import Node
-from config import NodeConfig, SystemConfig, generate_public_configs
+from utils.config import NodeConfig, SystemConfig, generate_public_configs
 
 from typing import List, Callable, Optional, Tuple
 

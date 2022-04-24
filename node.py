@@ -11,6 +11,8 @@ from gevent import Greenlet  # type: ignore
 import math
 import logging
 
+from utils.types import NodeId
+
 
 class Node:
     def __init__(
@@ -69,6 +71,7 @@ class Node:
             accepted_nodes = dict()
             learned_nodes = dict()
             learned = None
+            commit_proof_from_acceptors: Dict[NodeId, CommitProof] = {}
 
         started_send_pull = False
         started_send_proposals = False
@@ -369,6 +372,37 @@ class Node:
                         pnumber=pnumber,
                     )
                     self.send_func(message.sender_id, msg_to_send)
+
+            # learner.onCommitProof()
+            if (
+                message is not None
+                and self.node_config.is_learner
+                and message.type == MessageType.COMMITPROOF
+            ):
+                commit_proof_from_acceptors[message.sender_id] = (
+                    CommitProof.decode(self.system_config, message.get_field("commit_proof"))
+                )
+                
+                if message.sender_id in accepted_nodes:
+                    value, pnumber = accepted_nodes[message.sender_id]
+                    
+                    num_supporters = 0
+                    for commit_proof in commit_proof_from_acceptors.values():
+                        if commit_proof.valid(value, pnumber):
+                            num_supporters += 1
+                    
+                    if num_supporters >= math.ceil(
+                        (self.system_config.A + self.system_config.f + 1) / 2
+                    ):
+                        learned = value, pnumber
+                        msg_to_send = Message(
+                            MessageType.LEARNED,
+                            sender_id=self.node_config.node_id,
+                            value=value,
+                            pnumber=pnumber,
+                        )
+                        self.multicast_proposers(msg_to_send)
+
 
             # learner.onLearned()
             if (

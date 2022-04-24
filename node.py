@@ -106,6 +106,9 @@ class Node:
             msg_bytes = self.receive_func()
             message = parse_message(msg_bytes)
 
+            if message is not None:
+                logging.debug(f"Node {self.node_config.node_id} received {message.__dict__()}")
+
             # --------------------LEADER---------------------
             # leader.onElected()
             if self.leader_election.is_leader():
@@ -251,8 +254,6 @@ class Node:
                     self.leader_election.consider(message.get_field("pnumber"), message.get_field("election_proof"))
                     and self.leader_election.get_regency() == message.get_field("pnumber")
                 ):  
-                    logging.debug(f"Node {self.node_config.node_id} received query {message}")
-                    
                     msg_to_send = Message(
                         MessageType.REPLY,
                         sender_id=self.node_config.node_id,
@@ -278,8 +279,6 @@ class Node:
                     message.get_field("value"), self.leader_election.get_regency()
                 ):
                     commit_proof = tentative_commit_proof
-                    logging.debug(f"Node {self.node_config.node_id} has constructed commit proof")
-
                     msg_to_send = Message(
                         MessageType.COMMITPROOF,
                         sender_id=self.node_config.node_id,

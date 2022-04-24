@@ -99,9 +99,10 @@ class ProgressCertificate:
         return True
 
     def get_value_to_propose(self, original_proposal: int, pnumber: int) -> int:
-        accepted_values = set([
+        print([reply.get_field("accepted_value") for reply in self.replies.values()])
+        accepted_values = set(
             reply.get_field("accepted_value") for reply in self.replies.values()
-        ])
+        )
         
         for accepted_value in accepted_values:
             if accepted_value is not None and self.vouches_for(accepted_value, pnumber):

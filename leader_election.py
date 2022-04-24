@@ -4,7 +4,7 @@ import logging
 
 from typing import Dict, Callable, Set, Tuple
 
-from messages import Message, decode_signature, MessageType
+from messages import Message, decode_signature, MessageType, parse_message
 from utils.config import NodeConfig, SystemConfig
 from utils.types import RegencyNumber, NodeId
 
@@ -55,7 +55,7 @@ class LeaderElection:
         self.suspects[regency][signer_id] = suspect_message.__dict__()
         
         if len(self.suspects[regency]) > math.ceil((self.system_config.P + self.system_config.f) / 2):
-            self.proof = self.suspects[regency]
+            self.proof = list(self.suspects[regency].values())
             del self.suspects[regency]
             self.regency = regency + 1
             logging.debug(f"Node {self.node_config.node_id} is updating regency to {self.regency}" +
@@ -69,10 +69,18 @@ class LeaderElection:
         if len(proof) < 0: # Not enough proposers suspected the leader
             return False
 
-        for (signer_id, signature) in proof.values():
+        for encoded_suspect_message in proof:
+            try:
+                suspect_message = parse_message(encoded_suspect_message)
+            except Exception as e:
+                logging.warn(f"Failed to decode proof: {e}")
+                return False
+
+            signer_id = suspect_message.sender_id
             vk = self.system_config.all_nodes[signer_id].verifying_key
-            if not vk.verify(signature, str(new_regency).encode()):
+            if not suspect_message.verify(vk):
                 # Signature doesn't match
+                logging.warn(f"Signature verification failed for {suspect_message}")
                 return False
         
         # Since a quorum of proposers suspected the last leader, update regency

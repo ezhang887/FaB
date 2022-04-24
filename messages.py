@@ -86,13 +86,16 @@ def parse_message(byte_data: Optional[bytes]) -> Optional[Message]:
     except Exception:
         # logging.warn("Failed to decode bytes into string")
         return None
-
+    
     try:
         dict_data = json.loads(str_data)
     except ValueError:
         logging.warn(f"Failed to decode json: {str_data}")
         return None
 
+    return parse_message_from_dict(dict_data)
+
+def parse_message_from_dict(dict_data: Dict) -> Optional[Message]:
     if "type" not in dict_data:
         logging.warn(f"Message does not contain 'type' field: {str_data}")
         return None

@@ -1,4 +1,5 @@
 from collections import defaultdict
+from operator import is_
 from progress_certificate import CommitProof, ProgressCertificate
 from utils.config import NodeConfig, NodeConfigPublic, SystemConfig
 from messages import Message, parse_message, MessageType
@@ -231,17 +232,35 @@ class Node:
                 and self.node_config.is_acceptor
                 and message.type == MessageType.PROPOSE
             ):
-                accepted = message.get_field("value"), message.get_field("pnumber")
-                msg_to_send = Message(
-                    MessageType.ACCEPTED,
-                    sender_id=self.node_config.node_id,
-                    value=message.get_field("value"),
-                    pnumber=message.get_field("pnumber"),
+                value, pnumber = message.get_field("value"), message.get_field("pnumber")
+                leader_progress_cert = ProgressCertificate.decode(
+                    self.system_config, message.get_field("progress_cert")
                 )
-                self.multicast_learners(msg_to_send)
                 
-                msg_to_send.sign(self.node_config.signing_key)
-                self.multicast_acceptors(msg_to_send)
+                is_pnumber_match = pnumber == self.leader_election.get_regency()
+                has_accepted_for_round = (accepted is not None and accepted[1] >= pnumber)
+                is_value_vouched_for = (
+                    (accepted is not None and accepted[0] == value) 
+                    or leader_progress_cert.vouches_for(value, pnumber)
+                ) 
+
+                if (
+                    leader_progress_cert.has_quorum()
+                    and is_pnumber_match 
+                    and not has_accepted_for_round 
+                    and is_value_vouched_for
+                ):
+                    accepted = message.get_field("value"), message.get_field("pnumber")
+                    msg_to_send = Message(
+                        MessageType.ACCEPTED,
+                        sender_id=self.node_config.node_id,
+                        value=message.get_field("value"),
+                        pnumber=message.get_field("pnumber"),
+                    )
+                    self.multicast_learners(msg_to_send)
+                    
+                    msg_to_send.sign(self.node_config.signing_key)
+                    self.multicast_acceptors(msg_to_send)
 
             
             # acceptor.onQuery()

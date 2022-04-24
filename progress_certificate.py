@@ -1,10 +1,11 @@
 import logging
 import math
+import sys
 from typing import List, Dict, Tuple
 
 from utils.config import SystemConfig
 from utils.types import NodeId, RegencyNumber   
-from messages import Message, MessageType, parse_message
+from messages import Message, MessageType, parse_message, parse_message_from_dict
 
 class CommitProof:
     def __init__(self, system_config: SystemConfig):
@@ -44,12 +45,12 @@ class CommitProof:
         return [message.__dict__() for message in self.accepted_values.values()]
 
     @classmethod
-    def decode(cls, system_config: SystemConfig, encoded_accept_messages: List[Dict]):
+    def decode(cls, system_config: SystemConfig, accepted_message_dicts: List[Dict]):
         commit_proof = CommitProof(system_config)
 
         try:
-            for encoded_message in encoded_accept_messages:
-                commit_proof.add_part(parse_message(encoded_message))
+            for message_dict in accepted_message_dicts:
+                commit_proof.add_part(parse_message_from_dict(message_dict))
         except Exception as e:
             logging.warn(f"Failed to decode commit proof: {e}")
             return CommitProof(system_config)
@@ -99,7 +100,7 @@ class ProgressCertificate:
         return True
 
     def get_value_to_propose(self, original_proposal: int, pnumber: int) -> int:
-        print([reply.get_field("accepted_value") for reply in self.replies.values()])
+        # print([reply.get_field("accepted_value") for reply in self.replies.values()])
         accepted_values = set(
             reply.get_field("accepted_value") for reply in self.replies.values()
         )
@@ -112,3 +113,17 @@ class ProgressCertificate:
 
     def as_list(self) -> Dict:
         return [message.__dict__() for message in self.replies.values()]
+
+    @classmethod
+    def decode(cls, system_config: SystemConfig, reply_dicts: List[Dict]):
+        progress_cert = ProgressCertificate(system_config)
+
+        try:
+            for reply_dict in reply_dicts:
+                progress_cert.add_part(parse_message_from_dict(reply_dict))
+        except Exception as e:
+            logging.warn(f"Failed to decode progress certificate: {e}")
+            return ProgressCertificate(system_config)
+        
+        return progress_cert
+

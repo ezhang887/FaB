@@ -61,7 +61,7 @@ class Node:
         if self.node_config.is_acceptor:
             accepted = None
             tentative_commit_proof = CommitProof(self.system_config)
-            commit_proof = None
+            commit_proof = CommitProof(self.system_config)
 
         if self.node_config.is_learner:
             accepted_nodes = dict()
@@ -267,7 +267,7 @@ class Node:
                         sender_id=self.node_config.node_id,
                         accepted_value=accepted,
                         pnumber=message.get_field("pnumber"),
-                        commit_proof=""
+                        commit_proof=commit_proof.__dict__()
                     )
                     msg_to_send.sign(self.node_config.signing_key)
                     # TODO: really only need to send to leader
@@ -292,7 +292,7 @@ class Node:
                     msg_to_send = Message(
                         MessageType.COMMITPROOF,
                         sender_id=self.node_config.node_id,
-                        commit_proof=commit_proof
+                        commit_proof=commit_proof.__dict__()
                     )
                     self.multicast_learners(msg_to_send)
 

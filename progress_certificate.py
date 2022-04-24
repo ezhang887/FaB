@@ -8,7 +8,7 @@ from messages import Message, MessageType
 
 class CommitProof:
     def __init__(self, system_config: SystemConfig):
-        self.accepted_values: Dict[NodeId, Tuple[int, RegencyNumber]] = {}
+        self.accepted_values: Dict[NodeId, Message] = {}
         self.system_config = system_config
     
     def add_part(self, accepted_message: Message):
@@ -19,23 +19,29 @@ class CommitProof:
             logging.warn(f"Signature verification failed for {accepted_message}")
             return
 
-        prev_accepted_value = self.accepted_values.get(accepted_message.sender_id, (-1, -1))
-        
-        if accepted_message.get_field("pnumber") > prev_accepted_value[1]: 
-            accepted = (accepted_message.get_field("value"), accepted_message.get_field("pnumber"))
-            self.accepted_values[accepted_message.sender_id] = accepted
+        if (
+            accepted_message.sender_id not in self.accepted_values
+            or (self.accepted_values[accepted_message.sender_id].get_field("pnumber")
+                < accepted_message.get_field("pnumber"))
+        ):
+            self.accepted_values[accepted_message.sender_id] = accepted_message
 
     def valid(self, value: int, pnumber: RegencyNumber) -> bool:
-        vote_count = sum(
-            1 for node_id in self.accepted_values 
-            if self.accepted_values[node_id] == (value, pnumber)
-        )
+        vote_count = 0
+
+        for accepted_message in self.accepted_values.values():
+            accepted = (accepted_message.get_field("value"), accepted_message.get_field("pnumber"))
+            if (value, pnumber) == accepted:
+                vote_count += 1
+        
         quorum_needed = math.ceil(
             (self.system_config.A + self.system_config.f + 1) / 2
         )
 
         return vote_count >= quorum_needed
 
+    def __dict__(self) -> Dict:
+        return {id: message.__dict__() for id, message in self.accepted_values.items()}
 class ProgressCertificate:
     def __init__(self):
         pass

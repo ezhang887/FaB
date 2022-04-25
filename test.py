@@ -223,6 +223,113 @@ def simple_test_unique_roles(
 
     run_system(N, system_config, node_configs, sends, recvs, faulty_nodes)
 
+def view_change_test():
+    """
+    More complicated test case:
+    Faulty leader sends same message to 5 out of 6 acceptors (one of them being malicious).
+    The 4 non-faulty acceptors forward the same message to all learners.
+    The faulty acceptor only forwards the message to one learner.
+    This way, one learner will receive 5 ACCEPTED messages and learn the value, but the remaining learners only receive 4 (which is not enough).
+    A view change will be triggered, and the new leader should propose the same original value
+    """
+    f = 1
+    P = 3 * f + 1
+    A = 5 * f + 1
+    L = 3 * f + 1
+    N = P + A + L
+
+    rnd = random.Random(None)
+    leader = rnd.randint(0, P - 1)
+    print("Leader is", leader)
+
+    node_configs: List[NodeConfig] = []
+    for i in range(N):
+        sk, vk = generate_keys()
+        node_config = NodeConfig(
+            node_id=i,
+            is_acceptor=False,
+            is_proposer=False,
+            is_learner=False,
+            verifying_key=vk,
+            signing_key=sk,
+        )
+        node_configs.append(node_config)
+
+    # Proposers = 0, 1, 2, 3
+    # Acceptors = 4, 5, 6, 7, 8, 9
+    # Learners = 10, 11, 12, 13
+    for i in range(P):
+        node_configs[i].is_proposer = True
+    for i in range(A):
+        node_configs[i + P].is_acceptor = True
+    for i in range(L):
+        node_configs[i + P + A].is_learner = True
+
+    system_config = SystemConfig(
+        leader_id=leader,
+        P=P,
+        A=A,
+        L=L,
+        f=f,
+        all_nodes=generate_public_configs(node_configs),
+    )
+    sends, recvs = simple_router(N)
+    inputs = [Queue(1) for i in range(N)]
+
+    faulty_node_ids = set()
+
+    nodes: List[Node] = []
+    for i in range(N):
+        is_faulty_leader = False
+        is_faulty_acceptor = False
+
+        if i == leader:
+            # Faulty leader = 0
+            is_faulty_leader = True
+            faulty_node_ids.add(i)
+        elif i == P:
+            # Faulty acceptor = 4
+            is_faulty_acceptor = True
+            faulty_node_ids.add(i)
+
+        node = Node(
+            node_config=node_configs[i],
+            system_config=system_config,
+            receive_func=recvs[i],
+            send_func=sends[i],
+            get_input=inputs[i].get,
+            is_faulty_leader=is_faulty_leader,
+            is_faulty_acceptor=is_faulty_acceptor,
+            disable_commit_proof=True,
+        )
+        node.start()
+        nodes.append(node)
+
+    for i in range(N):
+        if i == leader:
+            inputs[i].put(254)
+        else:
+            inputs[i].put(i)
+
+    for n in nodes:
+        if faulty_node_ids is not None and n.node_config.node_id in faulty_node_ids:
+            continue
+
+        if n.node_config.is_learner:
+            res = n.wait()
+            print(f"Output from learner {n.node_config.node_id} is {res}")
+            assert res[0] == 254
+
+            # Node 10 learned in original view (hardcoded in node.py)
+            if n.node_config.node_id == 10:
+                assert res[1] == system_config.leader_id
+            # Other learners learn after view change
+            else:
+                assert res[1] == system_config.leader_id + 1
+
+        elif n.node_config.is_proposer:
+            n.wait()
+
 
 simple_test()
 simple_test_unique_roles()
@@ -242,3 +349,6 @@ simple_test_unique_roles(leader_ommission=True)
 # Leader randomly decides to send random stuff
 simple_test(leader_equivocation=True)
 simple_test_unique_roles(leader_equivocation=True)
+
+# View change test case - make sure safety is held
+view_change_test()

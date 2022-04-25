@@ -122,7 +122,6 @@ class Node:
                 assert self.node_config.is_proposer
 
                 def send_queries():
-                    logging.debug(f"Node {self.node_config.node_id} is sending QUERIES!")
                     if progress_cert.has_quorum():
                         return
                     elif not self.leader_election.is_leader(): 

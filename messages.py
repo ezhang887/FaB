@@ -54,7 +54,7 @@ class Message:
 
         return verifying_key.verify(self.signature, json.dumps(self.content).encode())
 
-    def __dict__(self) -> Dict:
+    def __dict__(self) -> Dict: # type: ignore
         msg_as_dict = {
             "sender_id": self.sender_id,
             "type": self.type.value,
@@ -97,19 +97,19 @@ def parse_message(byte_data: Optional[bytes]) -> Optional[Message]:
 
 def parse_message_from_dict(dict_data: Dict) -> Optional[Message]:
     if "type" not in dict_data:
-        logging.warn(f"Message does not contain 'type' field: {str_data}")
+        logging.warn(f"Message does not contain 'type' field: {dict_data}")
         return None
 
     try:
         msg_type = MessageType(dict_data["type"])
     except ValueError:
-        logging.warn(f"Message has invalid type field: {str_data}")
+        logging.warn(f"Message has invalid type field: {dict_data}")
         return None
 
     for field in REQUIRED_FIELDS_FOR_TYPE.get(msg_type, []):
         if field not in dict_data["content"]:
             logging.warn(
-                f"Message has type '{msg_type.value}' but does not have field '{field}': {str_data}"
+                f"Message has type '{msg_type.value}' but does not have field '{field}': {dict_data}"
             )
             return None
 

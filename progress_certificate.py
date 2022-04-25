@@ -50,7 +50,9 @@ class CommitProof:
 
         try:
             for message_dict in accepted_message_dicts:
-                commit_proof.add_part(parse_message_from_dict(message_dict))
+                message = parse_message_from_dict(message_dict)
+                if message is not None:
+                    commit_proof.add_part(message)
         except Exception as e:
             logging.warn(f"Failed to decode commit proof: {e}")
             return CommitProof(system_config)
@@ -77,7 +79,7 @@ class ProgressCertificate:
         return len(self.replies) >= self.system_config.A - self.system_config.f
 
     def vouches_for(self, value: int, pnumber: RegencyNumber) -> bool:
-        counts = {}
+        counts: Dict[int, int] = {}
         for reply in self.replies.values():
             accepted_value = reply.get_field("accepted_value")
             if accepted_value is not None:
@@ -111,7 +113,7 @@ class ProgressCertificate:
         
         return original_proposal    
 
-    def as_list(self) -> Dict:
+    def as_list(self) -> List[Dict]:
         return [message.__dict__() for message in self.replies.values()]
 
     @classmethod
@@ -120,7 +122,9 @@ class ProgressCertificate:
 
         try:
             for reply_dict in reply_dicts:
-                progress_cert.add_part(parse_message_from_dict(reply_dict))
+                message = parse_message_from_dict(reply_dict)
+                if message is not None:
+                    progress_cert.add_part(message)
         except Exception as e:
             logging.warn(f"Failed to decode progress certificate: {e}")
             return ProgressCertificate(system_config)

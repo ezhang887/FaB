@@ -14,14 +14,14 @@ class LeaderElection:
         self,
         node_config: NodeConfig,
         system_config: SystemConfig,
-        multicast: Callable[[bytes], None],
+        multicast: Callable[[Message], None],
     ):
         self.node_config = node_config
         self.regency = system_config.leader_id
         self.system_config = system_config
         self.suspects: Dict[RegencyNumber, Dict[NodeId, Dict]] = defaultdict(lambda: dict())
         self.multicast = multicast
-        self.proof: Dict[NodeId, Dict] = None
+        self.proof: Dict[NodeId, Dict] = {}
 
     def get_regency(self) -> int:
         return self.regency

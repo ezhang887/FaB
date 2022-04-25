@@ -7,7 +7,7 @@ from router import simple_router
 from node import Node
 from utils.config import NodeConfig, SystemConfig, generate_public_configs
 
-from typing import List, Callable, Optional, Tuple
+from typing import List, Callable, Optional, Tuple, Set
 
 logging.basicConfig(
     filename='test.log', 
@@ -64,7 +64,7 @@ def run_system(
         nonfaulty_learners.add(n.node_config.node_id)
 
     # Wait for all learners to commit
-    committed_learners = set()
+    committed_learners: Set[int] = set()
     while sorted(committed_learners) != sorted(nonfaulty_learners):
         output = output_queue.get()
         node_id = output["node_id"]

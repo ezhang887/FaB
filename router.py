@@ -18,18 +18,18 @@ def simple_router(
     def makeSend(i: int):
         def _send(j: int, o: bytes):
             delay = rnd.random() * maxdelay
-            gevent.spawn_later(delay, queues[j].put, (i, o))
+            gevent.spawn_later(delay, queues[j].put, o)
 
         return _send
 
     def makeRecv(j: int):
         def _recv():
             try:
-                (i, o) = queues[j].get(timeout=recv_timeout)
-                return (i, o)
+                o = queues[j].get(timeout=recv_timeout)
+                return o
             except gevent.queue.Empty:
                 # Timeout!
-                return None, None
+                return None
 
         return _recv
 

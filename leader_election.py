@@ -4,7 +4,7 @@ import logging
 
 from typing import Dict, Callable, Set, Tuple
 
-from messages import Message, decode_signature, MessageType, parse_message
+from messages import Message, decode_signature, MessageType, parse_message_from_dict
 from utils.config import NodeConfig, SystemConfig
 from utils.types import RegencyNumber, NodeId
 
@@ -54,7 +54,7 @@ class LeaderElection:
 
         self.suspects[regency][signer_id] = suspect_message.__dict__()
         
-        if len(self.suspects[regency]) > math.ceil((self.system_config.P + self.system_config.f) / 2):
+        if len(self.suspects[regency]) >= math.ceil((self.system_config.P + self.system_config.f + 1) / 2):
             self.proof = list(self.suspects[regency].values())
             del self.suspects[regency]
             self.regency = regency + 1
@@ -71,7 +71,7 @@ class LeaderElection:
 
         for encoded_suspect_message in proof:
             try:
-                suspect_message = parse_message(encoded_suspect_message)
+                suspect_message = parse_message_from_dict(encoded_suspect_message)
             except Exception as e:
                 logging.warn(f"Failed to decode proof: {e}")
                 return False

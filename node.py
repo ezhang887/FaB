@@ -106,12 +106,6 @@ class Node:
                     return learned
                 else:
                     return None
-            
-            msg_bytes = self.receive_func()
-            message = parse_message(msg_bytes)
-
-            if message is not None:
-                logging.debug(f"Node {self.node_config.node_id} received {message.__dict__()}")
 
             # --------------------LEADER---------------------
             # leader.onElected()
@@ -119,6 +113,7 @@ class Node:
                 assert self.node_config.is_proposer
 
                 def send_queries():
+                    logging.debug(f"Node {self.node_config.node_id} is sending QUERIES!")
                     if progress_cert.has_quorum():
                         return
                     elif not self.leader_election.is_leader(): 
@@ -128,7 +123,7 @@ class Node:
                     msg_to_send = Message(
                         MessageType.QUERY,
                         sender_id=self.node_config.node_id,
-                        pnumber=self.system_config.leader_id,
+                        pnumber=self.leader_election.get_regency(),
                         election_proof=self.leader_election.proof
                     )
                     self.multicast_acceptors(msg_to_send)
@@ -160,7 +155,7 @@ class Node:
                         MessageType.PROPOSE,
                         sender_id=self.node_config.node_id,
                         value=value_to_propose,
-                        pnumber=self.system_config.leader_id,
+                        pnumber=self.leader_election.get_regency(),
                         progress_cert=progress_cert.as_list()
                     )
                     self.multicast_acceptors(msg_to_send)
@@ -171,6 +166,12 @@ class Node:
                 if not started_send_proposals:
                     send_proposals()
                     started_send_proposals = True
+
+            msg_bytes = self.receive_func()
+            message = parse_message(msg_bytes)
+
+            if message is not None:
+                logging.debug(f"Node {self.node_config.node_id} received {message.__dict__()}")
 
             # leader receives REPLY
             if (

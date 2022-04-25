@@ -23,6 +23,9 @@ class Node:
         send_func: Callable,
         get_input: Callable,
         timeout: int = 5,  # Timeout in seconds
+        is_faulty_leader: bool = False,     # For testing purposes
+        is_faulty_acceptor: bool = False,   # For testing purposes
+        disable_commit_proof: bool = False,   # For testing purposes
     ):
         self.system_config = system_config
         self.node_config = node_config
@@ -35,6 +38,12 @@ class Node:
         self.leader_election = LeaderElection(
             node_config, self.system_config, self.multicast_proposers
         )
+
+        if is_faulty_leader:
+            assert system_config.leader_id == node_config.node_id
+        self.is_faulty_leader = is_faulty_leader
+        self.is_faulty_acceptor = is_faulty_acceptor
+        self.disable_commit_proof = disable_commit_proof
 
     def multicast(
         self,
@@ -159,7 +168,11 @@ class Node:
                         pnumber=self.leader_election.get_regency(),
                         progress_cert=progress_cert.as_list()
                     )
-                    self.multicast_acceptors(msg_to_send)
+                    if not self.is_faulty_leader:
+                        self.multicast_acceptors(msg_to_send)
+                    else:
+                        s = set([4, 5, 6, 7, 8])
+                        self.multicast(msg_to_send, node_filter=lambda n: n.node_id in s)
 
                     # Re-schedule this later
                     gevent.spawn_later(self.timeout * 2, send_proposals)
@@ -262,7 +275,10 @@ class Node:
                         value=message.get_field("value"),
                         pnumber=message.get_field("pnumber"),
                     )
-                    self.multicast_learners(msg_to_send)
+                    if not self.is_faulty_acceptor:
+                        self.multicast_learners(msg_to_send)
+                    else:
+                        self.multicast(msg_to_send, node_filter=lambda n: n.node_id == 10)
                     
                     msg_to_send.sign(self.node_config.signing_key)
                     self.multicast_acceptors(msg_to_send)
@@ -385,6 +401,7 @@ class Node:
                 message is not None
                 and self.node_config.is_learner
                 and message.type == MessageType.COMMITPROOF
+                and not self.disable_commit_proof
             ):
                 commit_proof_from_acceptors[message.sender_id] = (
                     CommitProof.decode(self.system_config, message.get_field("commit_proof"))

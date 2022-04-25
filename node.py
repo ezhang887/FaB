@@ -8,7 +8,7 @@ from leader_election import LeaderElection
 from typing import Callable, Dict, Optional
 import gevent  # type: ignore
 from gevent import Greenlet  # type: ignore
-from gevent.queue import Queue # type: ignore
+from gevent.queue import Queue  # type: ignore
 import math
 import logging
 
@@ -25,9 +25,9 @@ class Node:
         get_input: Callable,
         output_queue: Queue,
         timeout: int = 5,  # Timeout in seconds
-        is_faulty_leader: bool = False,     # For testing purposes
-        is_faulty_acceptor: bool = False,   # For testing purposes
-        disable_commit_proof: bool = False,   # For testing purposes
+        is_faulty_leader: bool = False,  # For testing purposes
+        is_faulty_acceptor: bool = False,  # For testing purposes
+        disable_commit_proof: bool = False,  # For testing purposes
     ):
         self.system_config = system_config
         self.node_config = node_config
@@ -137,7 +137,7 @@ class Node:
                 def send_queries():
                     if progress_cert.has_quorum():
                         return
-                    elif not self.leader_election.is_leader(): 
+                    elif not self.leader_election.is_leader():
                         # Timed out, let new leader take over
                         return
 
@@ -145,7 +145,7 @@ class Node:
                         MessageType.QUERY,
                         sender_id=self.node_config.node_id,
                         pnumber=self.leader_election.get_regency(),
-                        election_proof=self.leader_election.proof
+                        election_proof=self.leader_election.proof,
                     )
                     self.multicast_acceptors(msg_to_send)
 
@@ -157,10 +157,7 @@ class Node:
                     started_send_queries = True
 
             # leader.onStart()
-            if (
-                self.leader_election.is_leader() 
-                and progress_cert.has_quorum()
-            ):
+            if self.leader_election.is_leader() and progress_cert.has_quorum():
                 assert self.node_config.is_proposer
                 value_to_propose = progress_cert.get_value_to_propose(
                     original_proposal, self.leader_election.get_regency()
@@ -178,13 +175,15 @@ class Node:
                         sender_id=self.node_config.node_id,
                         value=value_to_propose,
                         pnumber=self.leader_election.get_regency(),
-                        progress_cert=progress_cert.as_list()
+                        progress_cert=progress_cert.as_list(),
                     )
                     if not self.is_faulty_leader:
                         self.multicast_acceptors(msg_to_send)
                     else:
                         s = set([4, 5, 6, 7, 8])
-                        self.multicast(msg_to_send, node_filter=lambda n: n.node_id in s)
+                        self.multicast(
+                            msg_to_send, node_filter=lambda n: n.node_id in s
+                        )
 
                     # Re-schedule this later
                     gevent.spawn_later(self.timeout * 2, send_proposals)
@@ -197,7 +196,9 @@ class Node:
             message = parse_message(msg_bytes)
 
             if message is not None:
-                logging.debug(f"Node {self.node_config.node_id} received {message.__dict__()}")
+                logging.debug(
+                    f"Node {self.node_config.node_id} received {message.__dict__()}"
+                )
 
             # leader receives REPLY
             if (
@@ -206,7 +207,7 @@ class Node:
                 and message.type == MessageType.REPLY
             ):
                 progress_cert.add_part(message)
-            
+
             # --------------------PROPOSER---------------------
             # proposer.onLearned()
             if (
@@ -262,22 +263,23 @@ class Node:
                 and self.node_config.is_acceptor
                 and message.type == MessageType.PROPOSE
             ):
-                value, pnumber = message.get_field("value"), message.get_field("pnumber")
+                value, pnumber = message.get_field("value"), message.get_field(
+                    "pnumber"
+                )
                 leader_progress_cert = ProgressCertificate.decode(
                     self.system_config, message.get_field("progress_cert")
                 )
-                
+
                 is_pnumber_match = pnumber == self.leader_election.get_regency()
-                has_accepted_for_round = (accepted is not None and accepted[1] >= pnumber)
+                has_accepted_for_round = accepted is not None and accepted[1] >= pnumber
                 is_value_vouched_for = (
-                    (accepted is not None and accepted[0] == value) 
-                    or leader_progress_cert.vouches_for(value, pnumber)
-                ) 
+                    accepted is not None and accepted[0] == value
+                ) or leader_progress_cert.vouches_for(value, pnumber)
 
                 if (
                     leader_progress_cert.has_quorum()
-                    and is_pnumber_match 
-                    and not has_accepted_for_round 
+                    and is_pnumber_match
+                    and not has_accepted_for_round
                     and is_value_vouched_for
                 ):
                     accepted = message.get_field("value"), message.get_field("pnumber")
@@ -290,22 +292,24 @@ class Node:
                     if not self.is_faulty_acceptor:
                         self.multicast_learners(msg_to_send)
                     else:
-                        self.multicast(msg_to_send, node_filter=lambda n: n.node_id == 10)
-                    
+                        self.multicast(
+                            msg_to_send, node_filter=lambda n: n.node_id == 10
+                        )
+
                     msg_to_send.sign(self.node_config.signing_key)
                     self.multicast_acceptors(msg_to_send)
 
-            
             # acceptor.onQuery()
             if (
                 message is not None
                 and self.node_config.is_acceptor
                 and message.type == MessageType.QUERY
             ):
-                if (
-                    self.leader_election.consider(message.get_field("pnumber"), message.get_field("election_proof"))
-                    and self.leader_election.get_regency() == message.get_field("pnumber")
-                ):  
+                if self.leader_election.consider(
+                    message.get_field("pnumber"), message.get_field("election_proof")
+                ) and self.leader_election.get_regency() == message.get_field(
+                    "pnumber"
+                ):
                     if accepted is not None:
                         accepted_value = accepted[0]
                     else:
@@ -316,22 +320,23 @@ class Node:
                         sender_id=self.node_config.node_id,
                         accepted_value=accepted_value,
                         pnumber=message.get_field("pnumber"),
-                        commit_proof=commit_proof.as_list()
+                        commit_proof=commit_proof.as_list(),
                     )
                     msg_to_send.sign(self.node_config.signing_key)
                     # TODO: really only need to send to leader
                     self.multicast_proposers(msg_to_send)
-
 
             # acceptor.onAccepted()
             if (
                 message is not None
                 and self.node_config.is_acceptor
                 and message.type == MessageType.ACCEPTED
-                and message.verify(self.system_config.all_nodes[message.sender_id].verifying_key)
+                and message.verify(
+                    self.system_config.all_nodes[message.sender_id].verifying_key
+                )
             ):
                 tentative_commit_proof.add_part(message)
-                
+
                 if tentative_commit_proof.valid(
                     message.get_field("value"), self.leader_election.get_regency()
                 ):
@@ -339,10 +344,9 @@ class Node:
                     msg_to_send = Message(
                         MessageType.COMMITPROOF,
                         sender_id=self.node_config.node_id,
-                        commit_proof=commit_proof.as_list()
+                        commit_proof=commit_proof.as_list(),
                     )
                     self.multicast_learners(msg_to_send)
-
 
             # --------------------LEARNER---------------------
             # learner.onAccepted()
@@ -416,18 +420,18 @@ class Node:
                 and message.type == MessageType.COMMITPROOF
                 and not self.disable_commit_proof
             ):
-                commit_proof_from_acceptors[message.sender_id] = (
-                    CommitProof.decode(self.system_config, message.get_field("commit_proof"))
+                commit_proof_from_acceptors[message.sender_id] = CommitProof.decode(
+                    self.system_config, message.get_field("commit_proof")
                 )
-                
+
                 if message.sender_id in accepted_nodes:
                     value, pnumber = accepted_nodes[message.sender_id]
-                    
+
                     num_supporters = 0
                     for commit_proof in commit_proof_from_acceptors.values():
                         if commit_proof.valid(value, pnumber):
                             num_supporters += 1
-                    
+
                     if num_supporters >= math.ceil(
                         (self.system_config.A + self.system_config.f + 1) / 2
                     ):

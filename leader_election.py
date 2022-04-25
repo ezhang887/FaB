@@ -19,7 +19,9 @@ class LeaderElection:
         self.node_config = node_config
         self.regency = system_config.leader_id
         self.system_config = system_config
-        self.suspects: Dict[RegencyNumber, Dict[NodeId, Dict]] = defaultdict(lambda: dict())
+        self.suspects: Dict[RegencyNumber, Dict[NodeId, Dict]] = defaultdict(
+            lambda: dict()
+        )
         self.multicast = multicast
         self.proof: Dict[NodeId, Dict] = {}
 
@@ -31,9 +33,9 @@ class LeaderElection:
 
     def suspect(self, regency):
         msg_to_send = Message(
-            MessageType.SUSPECT, 
+            MessageType.SUSPECT,
             sender_id=self.node_config.node_id,
-            regency=regency, 
+            regency=regency,
         )
         msg_to_send.sign(self.node_config.signing_key)
         self.multicast(msg_to_send)
@@ -42,7 +44,7 @@ class LeaderElection:
         assert suspect_message.type == MessageType.SUSPECT
 
         regency = suspect_message.get_field("regency")
-        if regency < self.regency: # Ignore timeouts for old leaders
+        if regency < self.regency:  # Ignore timeouts for old leaders
             return
 
         # Verify signature on message
@@ -53,20 +55,24 @@ class LeaderElection:
             return
 
         self.suspects[regency][signer_id] = suspect_message.__dict__()
-        
-        if len(self.suspects[regency]) >= math.ceil((self.system_config.P + self.system_config.f + 1) / 2):
+
+        if len(self.suspects[regency]) >= math.ceil(
+            (self.system_config.P + self.system_config.f + 1) / 2
+        ):
             self.proof = list(self.suspects[regency].values())
             del self.suspects[regency]
             self.regency = regency + 1
-            logging.debug(f"Node {self.node_config.node_id} is updating regency to {self.regency}" +
-                f" with proof {self.proof}")
+            logging.debug(
+                f"Node {self.node_config.node_id} is updating regency to {self.regency}"
+                + f" with proof {self.proof}"
+            )
 
     def consider(self, new_regency, proof):
         if new_regency == self.system_config.leader_id:
             # Initial leader doesn't need proof
             return True
 
-        if len(proof) < 0: # Not enough proposers suspected the leader
+        if len(proof) < 0:  # Not enough proposers suspected the leader
             return False
 
         for encoded_suspect_message in proof:
@@ -82,7 +88,7 @@ class LeaderElection:
                 # Signature doesn't match
                 logging.warn(f"Signature verification failed for {suspect_message}")
                 return False
-        
+
         # Since a quorum of proposers suspected the last leader, update regency
         if new_regency > self.regency:
             self.regency = new_regency

@@ -25,7 +25,7 @@ REQUIRED_FIELDS_FOR_TYPE = {
     MessageType.SUSPECT: ["regency"],
     MessageType.QUERY: ["pnumber", "election_proof"],
     MessageType.REPLY: ["accepted_value", "pnumber", "commit_proof"],
-    MessageType.COMMITPROOF: ["commit_proof"]
+    MessageType.COMMITPROOF: ["commit_proof"],
 }
 
 
@@ -33,7 +33,7 @@ class Message:
     def __init__(self, msg_type: MessageType, sender_id: int, **kwargs):
         self.type = msg_type
         self.sender_id = sender_id
-        
+
         self.content = {}
         for field in REQUIRED_FIELDS_FOR_TYPE.get(msg_type, []):
             if field not in kwargs:
@@ -41,30 +41,30 @@ class Message:
                     f"Cannot find required parameter '{field}' in 'kwargs' when creating message of type '{msg_type.value}'"
                 )
             self.content[field] = kwargs[field]
-    
+
     def get_field(self, field):
         return self.content[field]
 
     def sign(self, signing_key):
         self.signature = signing_key.sign(json.dumps(self.content).encode())
-    
+
     def verify(self, verifying_key):
         if not hasattr(self, "signature"):
             return False
 
         return verifying_key.verify(self.signature, json.dumps(self.content).encode())
 
-    def __dict__(self) -> Dict: # type: ignore
+    def __dict__(self) -> Dict:  # type: ignore
         msg_as_dict = {
             "sender_id": self.sender_id,
             "type": self.type.value,
-            "content": self.content
+            "content": self.content,
         }
-        
+
         if hasattr(self, "signature"):
-            encoded_signature = base64.b64encode(self.signature).decode('utf-8')
+            encoded_signature = base64.b64encode(self.signature).decode("utf-8")
             msg_as_dict["signature"] = encoded_signature
-        
+
         return msg_as_dict
 
     def __str__(self) -> str:
@@ -75,7 +75,8 @@ class Message:
 
 
 def decode_signature(signature: str) -> bytes:
-    return base64.b64decode(signature.encode('utf-8'))
+    return base64.b64decode(signature.encode("utf-8"))
+
 
 def parse_message(byte_data: Optional[bytes]) -> Optional[Message]:
     if byte_data is None:
@@ -86,7 +87,7 @@ def parse_message(byte_data: Optional[bytes]) -> Optional[Message]:
     except Exception as e:
         logging.warn(f"Failed to decode bytes into string: {e}")
         return None
-    
+
     try:
         dict_data = json.loads(str_data)
     except ValueError:
@@ -94,6 +95,7 @@ def parse_message(byte_data: Optional[bytes]) -> Optional[Message]:
         return None
 
     return parse_message_from_dict(dict_data)
+
 
 def parse_message_from_dict(dict_data: Dict) -> Optional[Message]:
     if "type" not in dict_data:

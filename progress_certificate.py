@@ -4,14 +4,15 @@ import sys
 from typing import List, Dict, Tuple
 
 from utils.config import SystemConfig
-from utils.types import NodeId, RegencyNumber   
+from utils.types import NodeId, RegencyNumber
 from messages import Message, MessageType, parse_message, parse_message_from_dict
+
 
 class CommitProof:
     def __init__(self, system_config: SystemConfig):
         self.accepted_values: Dict[NodeId, Message] = {}
         self.system_config = system_config
-    
+
     def add_part(self, accepted_message: Message):
         assert accepted_message.type == MessageType.ACCEPTED
 
@@ -20,10 +21,9 @@ class CommitProof:
             logging.warn(f"Signature verification failed for {accepted_message}")
             return
 
-        if (
-            accepted_message.sender_id not in self.accepted_values
-            or (self.accepted_values[accepted_message.sender_id].get_field("pnumber")
-                < accepted_message.get_field("pnumber"))
+        if accepted_message.sender_id not in self.accepted_values or (
+            self.accepted_values[accepted_message.sender_id].get_field("pnumber")
+            < accepted_message.get_field("pnumber")
         ):
             self.accepted_values[accepted_message.sender_id] = accepted_message
 
@@ -31,13 +31,14 @@ class CommitProof:
         vote_count = 0
 
         for accepted_message in self.accepted_values.values():
-            accepted = (accepted_message.get_field("value"), accepted_message.get_field("pnumber"))
+            accepted = (
+                accepted_message.get_field("value"),
+                accepted_message.get_field("pnumber"),
+            )
             if (value, pnumber) == accepted:
                 vote_count += 1
-        
-        quorum_needed = math.ceil(
-            (self.system_config.A + self.system_config.f + 1) / 2
-        )
+
+        quorum_needed = math.ceil((self.system_config.A + self.system_config.f + 1) / 2)
 
         return vote_count >= quorum_needed
 
@@ -56,7 +57,7 @@ class CommitProof:
         except Exception as e:
             logging.warn(f"Failed to decode commit proof: {e}")
             return CommitProof(system_config)
-        
+
         return commit_proof
 
 
@@ -64,7 +65,7 @@ class ProgressCertificate:
     def __init__(self, system_config: SystemConfig):
         self.replies: Dict[NodeId, Message] = {}
         self.system_config = system_config
-    
+
     def add_part(self, reply_message: Message):
         assert reply_message.type == MessageType.REPLY
 
@@ -84,16 +85,17 @@ class ProgressCertificate:
             accepted_value = reply.get_field("accepted_value")
             if accepted_value is not None:
                 counts[accepted_value] = counts.get(accepted_value, 0) + 1
-        
+
         for reply_value, count in counts.items():
-            if (
-                reply_value != value 
-                and count >= math.ceil((self.system_config.A - self.system_config.f + 1) / 2)
+            if reply_value != value and count >= math.ceil(
+                (self.system_config.A - self.system_config.f + 1) / 2
             ):
                 return False
 
         for reply in self.replies.values():
-            commit_proof = CommitProof.decode(self.system_config, reply.get_field("commit_proof"))
+            commit_proof = CommitProof.decode(
+                self.system_config, reply.get_field("commit_proof")
+            )
             accepted_value = reply.get_field("accepted_value")
 
             if value != accepted_value and commit_proof.valid(accepted_value, pnumber):
@@ -106,12 +108,12 @@ class ProgressCertificate:
         accepted_values = set(
             reply.get_field("accepted_value") for reply in self.replies.values()
         )
-        
+
         for accepted_value in accepted_values:
             if accepted_value is not None and self.vouches_for(accepted_value, pnumber):
                 return accepted_value
-        
-        return original_proposal    
+
+        return original_proposal
 
     def as_list(self) -> List[Dict]:
         return [message.__dict__() for message in self.replies.values()]
@@ -128,6 +130,5 @@ class ProgressCertificate:
         except Exception as e:
             logging.warn(f"Failed to decode progress certificate: {e}")
             return ProgressCertificate(system_config)
-        
-        return progress_cert
 
+        return progress_cert

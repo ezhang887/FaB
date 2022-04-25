@@ -10,11 +10,12 @@ from utils.config import NodeConfig, SystemConfig, generate_public_configs
 from typing import List, Callable, Optional, Tuple, Set
 
 logging.basicConfig(
-    filename='test.log', 
-    filemode='w',
-    format='%(asctime)s %(levelname)s:%(message)s', 
-    level=logging.DEBUG
+    filename="test.log",
+    filemode="w",
+    format="%(asctime)s %(levelname)s:%(message)s",
+    level=logging.DEBUG,
 )
+
 
 def generate_random_bytes(size=16) -> bytes:
     return bytes(random.getrandbits(8) for _ in range(size))
@@ -86,7 +87,10 @@ def run_system(
 
 
 def simple_test(
-    ommission: bool = False, equivocation: bool = False, leader_ommission: bool = False, leader_equivocation: bool = False
+    ommission: bool = False,
+    equivocation: bool = False,
+    leader_ommission: bool = False,
+    leader_equivocation: bool = False,
 ):
     f = 1
     P = 3 * f + 1
@@ -161,7 +165,10 @@ def simple_test(
 
 
 def simple_test_unique_roles(
-    ommission: bool = False, equivocation: bool = False, leader_ommission: bool = False, leader_equivocation: bool = False
+    ommission: bool = False,
+    equivocation: bool = False,
+    leader_ommission: bool = False,
+    leader_equivocation: bool = False,
 ):
     """
     Same as simple_test, but each node has a unique role
@@ -237,6 +244,7 @@ def simple_test_unique_roles(
                 sends[n] = new_send
 
     run_system(N, system_config, node_configs, sends, recvs, faulty_nodes)
+
 
 def view_change_test():
     """

@@ -71,7 +71,7 @@ def run_system(
 
 
 def simple_test(
-    ommission: bool = False, equivocation: bool = False, leader_ommission: bool = False
+    ommission: bool = False, equivocation: bool = False, leader_ommission: bool = False, leader_equivocation: bool = False
 ):
     f = 1
     P = 3 * f + 1
@@ -115,7 +115,7 @@ def simple_test(
     faulty_nodes = None
 
     if ommission or equivocation or leader_ommission:
-        if leader_ommission:
+        if leader_ommission or leader_equivocation:
             faulty_nodes = [leader]
         else:
             nodes_to_sample = list(range(N))
@@ -132,7 +132,7 @@ def simple_test(
                         orig_send(j, o)
 
                 sends[n] = new_send
-            elif equivocation:
+            elif equivocation or leader_equivocation:
                 # Randomly send random data or send original data
                 def new_send(j: int, o: bytes):
                     if rnd.random() < 0.5:
@@ -146,7 +146,7 @@ def simple_test(
 
 
 def simple_test_unique_roles(
-    ommission: bool = False, equivocation: bool = False, leader_ommission: bool = False
+    ommission: bool = False, equivocation: bool = False, leader_ommission: bool = False, leader_equivocation: bool = False
 ):
     """
     Same as simple_test, but each node has a unique role
@@ -194,7 +194,7 @@ def simple_test_unique_roles(
     faulty_nodes = None
 
     if ommission or equivocation or leader_ommission:
-        if leader_ommission:
+        if leader_ommission or leader_equivocation:
             faulty_nodes = [leader]
         else:
             nodes_to_sample = list(range(N))
@@ -211,7 +211,7 @@ def simple_test_unique_roles(
                         orig_send(j, o)
 
                 sends[n] = new_send
-            elif equivocation:
+            elif equivocation or leader_equivocation:
                 # Randomly send random data or send original data
                 def new_send(j: int, o: bytes):
                     if rnd.random() < 0.5:
@@ -238,3 +238,7 @@ simple_test_unique_roles(equivocation=True)
 # Leader randomly decides to not send messages
 simple_test(leader_ommission=True)
 simple_test_unique_roles(leader_ommission=True)
+
+# Leader randomly decides to send random stuff
+simple_test(leader_equivocation=True)
+simple_test_unique_roles(leader_equivocation=True)

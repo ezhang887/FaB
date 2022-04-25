@@ -52,6 +52,7 @@ def run_system(
         # TODO: give different original proposal values to different nodes
         inputs[i].put(254)
 
+    pnumbers = set()
     for n in nodes:
         if faulty_node_ids is not None and n.node_config.node_id in faulty_node_ids:
             continue
@@ -61,9 +62,12 @@ def run_system(
             res = n.wait()
             print(f"Output from learner {n.node_config.node_id} is {res}")
             assert res[0] == 254
-            assert res[1] == system_config.leader_id
+            pnumbers.add(res[1])
         elif n.node_config.is_proposer:
             n.wait()
+
+    # Make sure all learned values come from same view
+    assert len(pnumbers) == 1
 
 
 def simple_test(

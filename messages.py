@@ -83,8 +83,8 @@ def parse_message(byte_data: Optional[bytes]) -> Optional[Message]:
 
     try:
         str_data = byte_data.decode("utf-8")
-    except Exception:
-        # logging.warn("Failed to decode bytes into string")
+    except Exception as e:
+        logging.warn(f"Failed to decode bytes into string: {e}")
         return None
     
     try:

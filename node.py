@@ -149,6 +149,7 @@ class Node:
                     if len(satisfied_nodes) >= math.ceil(
                         (self.system_config.P + self.system_config.f + 1) / 2
                     ):
+                        started_send_proposals = False
                         return
 
                     msg_to_send = Message(
@@ -277,10 +278,15 @@ class Node:
                     self.leader_election.consider(message.get_field("pnumber"), message.get_field("election_proof"))
                     and self.leader_election.get_regency() == message.get_field("pnumber")
                 ):  
+                    if accepted is not None:
+                        accepted_value = accepted[0]
+                    else:
+                        accepted_value = None
+
                     msg_to_send = Message(
                         MessageType.REPLY,
                         sender_id=self.node_config.node_id,
-                        accepted_value=accepted,
+                        accepted_value=accepted_value,
                         pnumber=message.get_field("pnumber"),
                         commit_proof=commit_proof.as_list()
                     )

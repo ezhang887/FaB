@@ -8,6 +8,7 @@ from leader_election import LeaderElection
 from typing import Callable, Dict, Optional
 import gevent  # type: ignore
 from gevent import Greenlet  # type: ignore
+from gevent.queue import Queue # type: ignore
 import math
 import logging
 
@@ -22,6 +23,7 @@ class Node:
         receive_func: Callable,
         send_func: Callable,
         get_input: Callable,
+        output_queue: Queue,
         timeout: int = 5,  # Timeout in seconds
         is_faulty_leader: bool = False,     # For testing purposes
         is_faulty_acceptor: bool = False,   # For testing purposes
@@ -33,11 +35,13 @@ class Node:
         self.receive_func = receive_func
         self.send_func = send_func
         self.get_input = get_input
+        self.output_queue = output_queue
 
         self.timeout = timeout
         self.leader_election = LeaderElection(
             node_config, self.system_config, self.multicast_proposers
         )
+        self.committed = False
 
         if is_faulty_leader:
             assert system_config.leader_id == node_config.node_id
@@ -54,6 +58,15 @@ class Node:
         for node in self.system_config.all_nodes:
             if node_filter is not None and node_filter(node):
                 self.send_func(node.node_id, encoded_message)
+
+    def commit(self, value):
+        if not self.committed:
+            output = {
+                "node_id": self.node_config.node_id,
+                "value": value,
+            }
+            self.output_queue.put(output)
+            self.committed = True
 
     def multicast_acceptors(self, message: Message):
         self.multicast(message, node_filter=lambda n: n.is_acceptor)
@@ -233,7 +246,7 @@ class Node:
                 and message.type == MessageType.SATISFIED
             ):
                 satisfied_nodes.add(message.sender_id)
-            
+
             # If the proposer receives a SUSPECT message
             if (
                 message is not None
@@ -359,6 +372,7 @@ class Node:
                         pnumber=message.get_field("pnumber"),
                     )
                     self.multicast_proposers(msg_to_send)
+                    self.commit(learned)
 
             # learner.onStart()
             if self.node_config.is_learner:
@@ -426,7 +440,6 @@ class Node:
                         )
                         self.multicast_proposers(msg_to_send)
 
-
             # learner.onLearned()
             if (
                 message is not None
@@ -445,12 +458,12 @@ class Node:
 
                 if num_learns >= self.system_config.f + 1:
                     learned = (message.get_field("value"), message.get_field("pnumber"))
+                    self.commit(learned)
                     # print(f"Learner {self.node_config.node_id} has LEARNED {learned}")
 
     def start(self):
         self.thread = Greenlet(self.run)
         self.thread.start()
 
-    def wait(self):
-        self.thread.join()
-        return self.thread.value
+    def stop(self):
+        self.thread.kill()

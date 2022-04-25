@@ -35,6 +35,7 @@ def run_system(
     faulty_node_ids: Optional[List[int]] = None,
 ):
     inputs = [Queue(1) for i in range(N)]
+    output_queue = Queue()
 
     nodes: List[Node] = []
     for i in range(N):
@@ -44,6 +45,7 @@ def run_system(
             receive_func=recvs[i],
             send_func=sends[i],
             get_input=inputs[i].get,
+            output_queue=output_queue,
         )
         node.start()
         nodes.append(node)
@@ -53,18 +55,31 @@ def run_system(
         inputs[i].put(254)
 
     pnumbers = set()
+    nonfaulty_learners = set()
     for n in nodes:
         if faulty_node_ids is not None and n.node_config.node_id in faulty_node_ids:
             continue
+        if not n.node_config.is_learner:
+            continue
+        nonfaulty_learners.add(n.node_config.node_id)
 
-        # TODO: Currently acceptors don't return. Fix this?
-        if n.node_config.is_learner:
-            res = n.wait()
-            print(f"Output from learner {n.node_config.node_id} is {res}")
-            assert res[0] == 254
-            pnumbers.add(res[1])
-        elif n.node_config.is_proposer:
-            n.wait()
+    # Wait for all learners to commit
+    committed_learners = set()
+    while sorted(committed_learners) != sorted(nonfaulty_learners):
+        output = output_queue.get()
+        node_id = output["node_id"]
+
+        if node_id not in nonfaulty_learners:
+            continue
+
+        value = output["value"]
+        print(f"Output from learner {node_id} is {value}")
+        assert value[0] == 254
+        pnumbers.add(value[1])
+        committed_learners.add(node_id)
+
+    for n in nodes:
+        n.stop()
 
     # Make sure all learned values come from same view
     assert len(pnumbers) == 1
@@ -275,6 +290,7 @@ def view_change_test():
     )
     sends, recvs = simple_router(N)
     inputs = [Queue(1) for i in range(N)]
+    output_queue = Queue()
 
     faulty_node_ids = set()
 
@@ -298,6 +314,7 @@ def view_change_test():
             receive_func=recvs[i],
             send_func=sends[i],
             get_input=inputs[i].get,
+            output_queue=output_queue,
             is_faulty_leader=is_faulty_leader,
             is_faulty_acceptor=is_faulty_acceptor,
             disable_commit_proof=True,
@@ -311,24 +328,38 @@ def view_change_test():
         else:
             inputs[i].put(i)
 
+    nonfaulty_learners = set()
     for n in nodes:
         if faulty_node_ids is not None and n.node_config.node_id in faulty_node_ids:
             continue
+        if not n.node_config.is_learner:
+            continue
+        nonfaulty_learners.add(n.node_config.node_id)
 
-        if n.node_config.is_learner:
-            res = n.wait()
-            print(f"Output from learner {n.node_config.node_id} is {res}")
-            assert res[0] == 254
+    # Wait for all learners to commit
+    committed_learners = set()
+    while sorted(committed_learners) != sorted(nonfaulty_learners):
+        output = output_queue.get()
+        node_id = output["node_id"]
 
-            # Node 10 learned in original view (hardcoded in node.py)
-            if n.node_config.node_id == 10:
-                assert res[1] == system_config.leader_id
-            # Other learners learn after view change
-            else:
-                assert res[1] == system_config.leader_id + 1
+        if node_id not in nonfaulty_learners:
+            continue
 
-        elif n.node_config.is_proposer:
-            n.wait()
+        value = output["value"]
+        print(f"Output from learner {node_id} is {value}")
+        assert value[0] == 254
+
+        # Node 10 learned in original view (hardcoded in node.py)
+        if node_id == 10:
+            assert value[1] == system_config.leader_id
+        # Other learners learn after view change
+        else:
+            assert value[1] == system_config.leader_id + 1
+
+        committed_learners.add(node_id)
+
+    for n in nodes:
+        n.stop()
 
 
 simple_test()

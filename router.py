@@ -29,7 +29,7 @@ def simple_router(
                 return o
             except gevent.queue.Empty:
                 # Timeout!
-                return None, None
+                return None
 
         return _recv
 

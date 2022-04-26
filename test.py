@@ -1,4 +1,5 @@
 import random
+from re import A, L
 from gevent.queue import Queue  # type: ignore
 from ecdsa import SigningKey, VerifyingKey  # type: ignore
 import logging
@@ -15,6 +16,17 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s:%(message)s",
     level=logging.DEBUG,
 )
+
+class TestParams:
+    def __init__(self, P: int, A: int, L: int, f: int, t: int):
+        self.P = P
+        self.A = A
+        self.L = L
+        self.f = f
+        self.t = t
+
+
+default_test_params = TestParams(P=4, A=6, L=4, f=1, t=1)
 
 
 def generate_random_bytes(size=16) -> bytes:
@@ -91,15 +103,12 @@ def simple_test(
     equivocation: bool = False,
     leader_ommission: bool = False,
     leader_equivocation: bool = False,
+    test_params = default_test_params
 ):
-    f = 1
-    P = 3 * f + 1
-    A = 5 * f + 1
-    L = 3 * f + 1
     N = A
 
     rnd = random.Random(None)
-    leader = rnd.randint(0, P - 1)
+    leader = rnd.randint(0, test_params.P - 1)
     print("Leader is", leader)
 
     node_configs: List[NodeConfig] = []
@@ -115,19 +124,20 @@ def simple_test(
         )
         node_configs.append(node_config)
 
-    for i in range(P):
+    for i in range(test_params.P):
         node_configs[i].is_proposer = True
-    for i in range(A):
+    for i in range(test_params.A):
         node_configs[i].is_acceptor = True
-    for i in range(N - 1, N - L - 1, -1):
+    for i in range(N - 1, N - test_params.L - 1, -1):
         node_configs[i].is_learner = True
 
     system_config = SystemConfig(
         leader_id=leader,
-        P=P,
-        A=A,
-        L=L,
-        f=f,
+        P=test_params.P,
+        A=test_params.A,
+        L=test_params.L,
+        f=test_params.f,
+        t=test_params.t,
         all_nodes=generate_public_configs(node_configs),
     )
     sends, recvs = simple_router(N)
@@ -139,7 +149,7 @@ def simple_test(
         else:
             nodes_to_sample = list(range(N))
             nodes_to_sample.remove(leader)
-            faulty_nodes = rnd.sample(nodes_to_sample, f)
+            faulty_nodes = rnd.sample(nodes_to_sample, test_params.f)
 
         for n in faulty_nodes:
             print(f"Faulty node: {node_configs[n]}")
@@ -169,19 +179,16 @@ def simple_test_unique_roles(
     equivocation: bool = False,
     leader_ommission: bool = False,
     leader_equivocation: bool = False,
+    test_params = default_test_params
 ):
     """
     Same as simple_test, but each node has a unique role
     (e.g. a node is either a proposer or acceptor or learner)
     """
-    f = 1
-    P = 3 * f + 1
-    A = 5 * f + 1
-    L = 3 * f + 1
-    N = P + A + L
+    N = test_params.P + test_params.A + test_params.L
 
     rnd = random.Random(None)
-    leader = rnd.randint(0, P - 1)
+    leader = rnd.randint(0, test_params.P - 1)
     print("Leader is", leader)
 
     node_configs: List[NodeConfig] = []
@@ -197,19 +204,20 @@ def simple_test_unique_roles(
         )
         node_configs.append(node_config)
 
-    for i in range(P):
+    for i in range(test_params.P):
         node_configs[i].is_proposer = True
-    for i in range(A):
-        node_configs[i + P].is_acceptor = True
-    for i in range(L):
-        node_configs[i + P + A].is_learner = True
+    for i in range(test_params.A):
+        node_configs[i + test_params.P].is_acceptor = True
+    for i in range(test_params.L):
+        node_configs[i + test_params.P + test_params.A].is_learner = True
 
     system_config = SystemConfig(
         leader_id=leader,
-        P=P,
-        A=A,
-        L=L,
-        f=f,
+        P=test_params.P,
+        A=test_params.A,
+        L=test_params.L,
+        f=test_params.f,
+        t=test_params.t,
         all_nodes=generate_public_configs(node_configs),
     )
     sends, recvs = simple_router(N)
@@ -221,7 +229,7 @@ def simple_test_unique_roles(
         else:
             nodes_to_sample = list(range(N))
             nodes_to_sample.remove(leader)
-            faulty_nodes = rnd.sample(nodes_to_sample, f)
+            faulty_nodes = rnd.sample(nodes_to_sample, test_params.f)
 
         for n in faulty_nodes:
             print(f"Faulty node: {node_configs[n]}")
@@ -246,7 +254,7 @@ def simple_test_unique_roles(
     run_system(N, system_config, node_configs, sends, recvs, faulty_nodes)
 
 
-def view_change_test():
+def view_change_test(test_params = default_test_params):
     """
     More complicated test case:
     Faulty leader sends same message to 5 out of 6 acceptors (one of them being malicious).
@@ -255,14 +263,10 @@ def view_change_test():
     This way, one learner will receive 5 ACCEPTED messages and learn the value, but the remaining learners only receive 4 (which is not enough).
     A view change will be triggered, and the new leader should propose the same original value
     """
-    f = 1
-    P = 3 * f + 1
-    A = 5 * f + 1
-    L = 3 * f + 1
-    N = P + A + L
-
+    N = test_params.P + test_params.A + test_params.L
+    
     rnd = random.Random(None)
-    leader = rnd.randint(0, P - 1)
+    leader = rnd.randint(0, test_params.P - 1)
     print("Leader is", leader)
 
     node_configs: List[NodeConfig] = []
@@ -281,19 +285,20 @@ def view_change_test():
     # Proposers = 0, 1, 2, 3
     # Acceptors = 4, 5, 6, 7, 8, 9
     # Learners = 10, 11, 12, 13
-    for i in range(P):
+    for i in range(test_params.P):
         node_configs[i].is_proposer = True
-    for i in range(A):
-        node_configs[i + P].is_acceptor = True
-    for i in range(L):
-        node_configs[i + P + A].is_learner = True
+    for i in range(test_params.A):
+        node_configs[i + test_params.P].is_acceptor = True
+    for i in range(test_params.L):
+        node_configs[i + test_params.P + test_params.A].is_learner = True
 
     system_config = SystemConfig(
         leader_id=leader,
-        P=P,
-        A=A,
-        L=L,
-        f=f,
+        P=test_params.P,
+        A=test_params.A,
+        L=test_params.L,
+        f=test_params.f,
+        t=test_params.t,
         all_nodes=generate_public_configs(node_configs),
     )
     sends, recvs = simple_router(N)
@@ -311,7 +316,7 @@ def view_change_test():
             # Faulty leader = 0
             is_faulty_leader = True
             faulty_node_ids.add(i)
-        elif i == P:
+        elif i == test_params.P:
             # Faulty acceptor = 4
             is_faulty_acceptor = True
             faulty_node_ids.add(i)
@@ -370,24 +375,26 @@ def view_change_test():
         n.stop()
 
 
-simple_test()
-simple_test_unique_roles()
+if __name__ == "__main__":
+    simple_test()
+    simple_test_unique_roles()
 
-# Ommission: `f` non-leader nodes randomly don't send messages
-simple_test(ommission=True)
-simple_test_unique_roles(ommission=True)
+    # Ommission: `f` non-leader nodes randomly don't send messages
+    simple_test(ommission=True)
+    simple_test_unique_roles(ommission=True)
 
-# Equivocation: `f` non-leader nodes randomly send random bytes
-simple_test(equivocation=True)
-simple_test_unique_roles(equivocation=True)
+    # Equivocation: `f` non-leader nodes randomly send random bytes
+    simple_test(equivocation=True)
+    simple_test_unique_roles(equivocation=True)
 
-# Leader randomly decides to not send messages
-simple_test(leader_ommission=True)
-simple_test_unique_roles(leader_ommission=True)
+    # Leader randomly decides to not send messages
+    simple_test(leader_ommission=True)
+    simple_test_unique_roles(leader_ommission=True)
 
-# Leader randomly decides to send random stuff
-simple_test(leader_equivocation=True)
-simple_test_unique_roles(leader_equivocation=True)
+    # Leader randomly decides to send random stuff
+    simple_test(leader_equivocation=True)
+    simple_test_unique_roles(leader_equivocation=True)
 
-# View change test case - make sure safety is held
-view_change_test()
+    # View change test case - make sure safety is held
+    view_change_test()
+

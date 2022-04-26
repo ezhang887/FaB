@@ -25,7 +25,8 @@ class SystemConfig:
     P: int  # Number of proposers
     A: int  # Number of acceptors
     L: int  # Number of learners
-    f: int  # Number of faulty nodes
+    f: int  # Max number of faulty nodes
+    t: int  # Max number of faulty nodes for 2-round consensus
     all_nodes: List[NodeConfigPublic]  # List of all nodes in the system
 
 

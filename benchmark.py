@@ -1,5 +1,6 @@
 import time
-from test import TestParams, simple_test, view_change_test
+from test import TestParams, simple_test
+from router import get_bytes_sent, reset_bytes_sent
 
 benchmark_params = {
     "Original": TestParams(P=7, A=7, L=7, f=1, t=1),
@@ -10,12 +11,13 @@ benchmark_params = {
 
 for name, params in benchmark_params.items():
     timings = []
-    print(name, params)
+    reset_bytes_sent()
 
-    for _ in range(10):
+    for _ in range(1):
         t1 = time.perf_counter()
         simple_test(ommission=True, test_params=params)
         t2 = time.perf_counter()
         timings.append(t2 - t1)
     
     print(f"Simple test for {name} algorithm took {sum(timings) / len(timings)}s")
+    print(f"{get_bytes_sent() / len(timings)} bytes sent in total")

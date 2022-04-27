@@ -98,6 +98,9 @@ class ProgressCertificate:
             )
             accepted_value = reply.get_field("accepted_value")
 
+            if len(commit_proof.accepted_values) > 0:
+                print([m.content for m in commit_proof.accepted_values.values()], accepted_value)
+
             if value != accepted_value and commit_proof.valid(accepted_value, pnumber):
                 return False
 

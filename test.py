@@ -6,6 +6,7 @@ import logging
 from router import simple_router
 from node import Node
 from utils.config import NodeConfig, SystemConfig, generate_public_configs
+from tests.faulty_node_parameterized_fab import FaultyNodeParameterizedFaB
 
 from typing import List, Callable, Optional, Tuple, Set
 
@@ -370,6 +371,125 @@ def view_change_test():
         n.stop()
 
 
+def parameterized_fab_failure_test():
+    """
+    Replicates a possible failure in Parameterized FaB (pointed out in Section 3.3 of https://arxiv.org/pdf/1712.01367.pdf).
+    Faulty leader sends A to 3 out of 4 Acceptors (Acceptors 0, 1, 2), but sends B to the last Acceptor (Acceptor 3). Acceptor 0 is also faulty.
+    Acceptors 0, 1, 2 ACCEPT the proposal for A and sign + forward to other Acceptors.
+    However, only Acceptor 2 receives all the the forwarded proposals (due to asynchrony), and thus only Acceptor 2 forms a commit proof for A.
+    A new view is triggered due to timeouts, and new leader queries Acceptors to form a progress certificate.
+    Acceptor 0 (since it's faulty replies with value B). Acceptor 3 also replies with B since that's what it received from the leader.
+    Then, either Acceptor 1 and 2 will reply with A to the leader, and the leader will have a PC with 2 nodes replying with B and one node replying with A (PC needs 3 replies in total).
+    However, the PC will also contain a commit proof for A, since acceptor 2 formed a commit proof for A. As a result, there's a conflict in the PC, so the new leader doesn't know what to propose.
+    """
+    P = 4
+    A = 4
+    L = 4
+    N = P + A + L
+
+    rnd = random.Random(None)
+    leader = rnd.randint(0, P - 1)
+    print("Leader is", leader)
+
+    node_configs: List[NodeConfig] = []
+    for i in range(N):
+        sk, vk = generate_keys()
+        node_config = NodeConfig(
+            node_id=i,
+            is_acceptor=False,
+            is_proposer=False,
+            is_learner=False,
+            verifying_key=vk,
+            signing_key=sk,
+        )
+        node_configs.append(node_config)
+
+    # Proposers = 0, 1, 2, 3
+    # Acceptors = 4, 5, 6, 7
+    # Learners = 8, 9, 10, 11
+    for i in range(P):
+        node_configs[i].is_proposer = True
+    for i in range(A):
+        node_configs[i + P].is_acceptor = True
+    for i in range(L):
+        node_configs[i + P + A].is_learner = True
+
+    system_config = SystemConfig(
+        leader_id=leader,
+        P=P,
+        A=A,
+        L=L,
+        f=1,
+        all_nodes=generate_public_configs(node_configs),
+    )
+    sends, recvs = simple_router(N)
+    inputs = [Queue(1) for i in range(N)]
+    output_queue = Queue()
+
+    faulty_node_ids = set()
+
+    nodes: List[Node] = []
+    for i in range(N):
+        is_faulty_leader = False
+        is_faulty_acceptor = False
+
+        if i == leader:
+            # Faulty leader = 0
+            is_faulty_leader = True
+            faulty_node_ids.add(i)
+        elif i == P:
+            # Faulty acceptor = 4
+            is_faulty_acceptor = True
+            faulty_node_ids.add(i)
+
+        node = FaultyNodeParameterizedFaB(
+            node_config=node_configs[i],
+            system_config=system_config,
+            receive_func=recvs[i],
+            send_func=sends[i],
+            get_input=inputs[i].get,
+            output_queue=output_queue,
+            is_faulty_leader=is_faulty_leader,
+            is_faulty_acceptor=is_faulty_acceptor,
+            disable_commit_proof=False,
+        )
+        node.start()
+        nodes.append(node)
+
+    for i in range(N):
+        if i == leader:
+            inputs[i].put(254)
+        else:
+            inputs[i].put(i)
+
+    nonfaulty_learners = set()
+    for n in nodes:
+        if faulty_node_ids is not None and n.node_config.node_id in faulty_node_ids:
+            continue
+        if not n.node_config.is_learner:
+            continue
+        nonfaulty_learners.add(n.node_config.node_id)
+
+    # Wait for all learners to commit
+    committed_learners = set()
+    while sorted(committed_learners) != sorted(nonfaulty_learners):
+        output = output_queue.get()
+        node_id = output["node_id"]
+
+        if node_id not in nonfaulty_learners:
+            continue
+
+        value = output["value"]
+        print(f"Output from learner {node_id} is {value}")
+        assert value[0] == 254
+
+        committed_learners.add(node_id)
+
+    for n in nodes:
+        n.stop()
+
+
+"""
 simple_test()
 simple_test_unique_roles()
 
@@ -391,3 +511,6 @@ simple_test_unique_roles(leader_equivocation=True)
 
 # View change test case - make sure safety is held
 view_change_test()
+"""
+
+parameterized_fab_failure_test()
